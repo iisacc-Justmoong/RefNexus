@@ -1,198 +1,230 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Dialogs
 
 ApplicationWindow {
     id: root
-    width: 1480
-    height: 900
+    width: 1280
+    height: 800
     visible: true
-    title: "RefNexus"
     color: "#0f172a"
 
     property bool alwaysOnTop: false
-    property bool clickThrough: false
-    property bool overlaySelection: false
-    property bool desaturateMode: false
-    property bool gridEnabled: true
-    property bool snapEnabled: true
-    property real zoomLevel: 1.0
-    property string activeWorkspace: "Concept Sprint 2025"
-    property string storageMode: "Embedded"
-    property var selectedItem: ({
-        title: "No selection",
-        type: "—",
-        board: "—",
-        source: "—",
-        capturedAt: "—",
-        license: "—",
-        tags: "",
-        notes: ""
-    })
-    property string searchQuery: ""
-    property bool searchOpen: false
-    property bool captureOpen: false
-    property bool settingsOpen: false
-    property bool importOpen: false
-    property bool exportOpen: false
-    property bool migrationOpen: false
-
-    flags: Qt.Window
-        | (alwaysOnTop ? Qt.WindowStaysOnTopHint : 0)
-        | (clickThrough ? Qt.WindowTransparentForInput : 0)
+    property int selectedIndex: -1
+    property real canvasWidth: 4200
+    property real canvasHeight: 2800
+    property int baseFlags: 0
+    property bool updatingFlags: false
+    property int activeCardInteractions: 0
 
     ListModel {
-        id: workspaceModel
-        ListElement { name: "Concept Sprint 2025" }
-        ListElement { name: "Studio Library" }
-        ListElement { name: "Client Decks" }
-        ListElement { name: "Personal Archive" }
+        id: canvasModel
     }
 
-    ListModel {
-        id: boardModel
-        ListElement { name: "Inspiration"; count: "128" }
-        ListElement { name: "Characters"; count: "64" }
-        ListElement { name: "Environments"; count: "92" }
-        ListElement { name: "Materials"; count: "41" }
-        ListElement { name: "Lighting"; count: "36" }
-        ListElement { name: "Inbox"; count: "17" }
+    function addImage(url, dropX, dropY) {
+        var urlString = url.toString()
+        var baseName = urlString.substring(urlString.lastIndexOf("/") + 1)
+        canvasModel.append({
+            itemType: "image",
+            title: decodeURIComponent(baseName),
+            description: "",
+            noteText: "",
+            source: url,
+            autoSize: true,
+            xPos: dropX,
+            yPos: dropY,
+            itemWidth: 320,
+            itemHeight: 240,
+            itemScale: 1.0,
+            itemRotation: 0
+        })
     }
 
-    header: AppHeader {
-        workspaceName: root.activeWorkspace
-        workspaceModel: workspaceModel
-        alwaysOnTop: root.alwaysOnTop
-        clickThrough: root.clickThrough
-        overlaySelection: root.overlaySelection
-        desaturateMode: root.desaturateMode
-        onWorkspaceChanged: root.activeWorkspace = name
-        onSearchRequested: {
-            root.searchQuery = query
-            root.searchOpen = true
+    function centerPosition() {
+        var centerX = canvasView.contentX + canvasView.width / 2
+        var centerY = canvasView.contentY + canvasView.height / 2
+        return { x: centerX, y: centerY }
+    }
+
+    function addNote() {
+        var center = centerPosition()
+        canvasModel.append({
+            itemType: "note",
+            title: "",
+            description: "",
+            noteText: "New note",
+            source: "",
+            autoSize: false,
+            xPos: center.x - 140,
+            yPos: center.y - 80,
+            itemWidth: 280,
+            itemHeight: 160,
+            itemScale: 1.0,
+            itemRotation: 0
+        })
+    }
+
+    function updateWindowFlags() {
+        if (updatingFlags) {
+            return
         }
-        onImportRequested: root.importOpen = true
-        onExportRequested: root.exportOpen = true
-        onCaptureRequested: root.captureOpen = true
-        onSettingsRequested: root.settingsOpen = true
-        onMigrationRequested: root.migrationOpen = true
-        onSnapshotRequested: statusBar.pushSnapshot()
-        onAlwaysOnTopToggled: root.alwaysOnTop = enabled
-        onClickThroughToggled: root.clickThrough = enabled
-        onOverlayToggled: root.overlaySelection = enabled
-        onDesaturateToggled: root.desaturateMode = enabled
+        updatingFlags = true
+        var newFlags = baseFlags
+        if (alwaysOnTop) {
+            newFlags |= Qt.WindowStaysOnTopHint
+        }
+        flags = newFlags
+        if (alwaysOnTop) {
+            raise()
+            requestActivate()
+        }
+        updatingFlags = false
     }
 
-    footer: StatusBar {
-        id: statusBar
-        zoomLevel: root.zoomLevel
-        storageMode: root.storageMode
-        activeBoard: boardTabs.currentBoard
-        selectedTitle: root.selectedItem.title
-        onZoomChanged: root.zoomLevel = value
-        onStorageModeChanged: root.storageMode = mode
+    Component.onCompleted: {
+        baseFlags = flags
+        updateWindowFlags()
     }
 
-    SearchDrawer {
-        requestedOpen: root.searchOpen
-        query: root.searchQuery
-        onDismissed: root.searchOpen = false
+    function beginCardInteraction() {
+        activeCardInteractions += 1
     }
 
-    CaptureDrawer {
-        requestedOpen: root.captureOpen
-        onDismissed: root.captureOpen = false
+    function endCardInteraction() {
+        activeCardInteractions = Math.max(0, activeCardInteractions - 1)
     }
 
-    SettingsDialog {
-        opened: root.settingsOpen
-        onClosed: root.settingsOpen = false
-    }
+    onAlwaysOnTopChanged: updateWindowFlags()
 
-    ImportDialog {
-        opened: root.importOpen
-        onClosed: root.importOpen = false
-        onMigrationRequested: {
-            root.importOpen = false
-            root.migrationOpen = true
+    header: ToolBar {
+        background: Rectangle {
+            color: "#0b1220"
+            border.color: "#1e293b"
+        }
+
+        RowLayout {
+            anchors.fill: parent
+            spacing: 10
+
+            ToolButton {
+                text: "Add Image"
+                onClicked: imageDialog.open()
+                Layout.leftMargin: 12
+            }
+
+            ToolButton {
+                text: "Add Note"
+                onClicked: root.addNote()
+            }
+
+            Item {
+                Layout.fillWidth: true
+            }
+
+            ToolButton {
+                text: "Top"
+                checkable: true
+                checked: root.alwaysOnTop
+                onToggled: root.alwaysOnTop = checked
+            }
+
         }
     }
 
-    ExportDialog {
-        opened: root.exportOpen
-        onClosed: root.exportOpen = false
+    FileDialog {
+        id: imageDialog
+        title: "Add Images"
+        fileMode: FileDialog.OpenFiles
+        nameFilters: ["Images (*.png *.jpg *.jpeg *.webp *.bmp *.gif *.tif *.tiff)"]
+        onAccepted: {
+            var center = root.centerPosition()
+            for (var i = 0; i < selectedFiles.length; i += 1) {
+                root.addImage(selectedFiles[i], center.x + i * 24, center.y + i * 24)
+            }
+        }
     }
 
-    MigrationWizard {
-        opened: root.migrationOpen
-        onClosed: root.migrationOpen = false
-    }
-
-    SplitView {
+    Flickable {
+        id: canvasView
         anchors.fill: parent
-        orientation: Qt.Horizontal
+        contentWidth: canvasRoot.width
+        contentHeight: canvasRoot.height
+        interactive: root.activeCardInteractions === 0
+        clip: true
+        ScrollBar.vertical: ScrollBar { }
+        ScrollBar.horizontal: ScrollBar { }
 
-        LeftSidebar {
-            SplitView.preferredWidth: 260
-            SplitView.minimumWidth: 220
-            workspaceModel: workspaceModel
-            boardsModel: boardModel
-            activeWorkspace: root.activeWorkspace
-            onWorkspaceSelected: root.activeWorkspace = name
-        }
+        Item {
+            id: canvasRoot
+            width: root.canvasWidth
+            height: root.canvasHeight
+            transformOrigin: Item.TopLeft
 
-        ColumnLayout {
-            id: centerColumn
-            spacing: 0
-            SplitView.fillWidth: true
-            SplitView.minimumWidth: 640
-
-            BoardTabs {
-                id: boardTabs
-                Layout.fillWidth: true
-                boardsModel: boardModel
+            Rectangle {
+                anchors.fill: parent
+                color: "#0b1220"
             }
 
-            BoardToolbar {
-                Layout.fillWidth: true
-                gridEnabled: root.gridEnabled
-                snapEnabled: root.snapEnabled
-                desaturateMode: root.desaturateMode
-                onGridToggled: root.gridEnabled = enabled
-                onSnapToggled: root.snapEnabled = enabled
-                onDesaturateToggled: root.desaturateMode = enabled
+            DropArea {
+                anchors.fill: parent
+                onDropped: {
+                    if (!drop.hasUrls) {
+                        return
+                    }
+                    var baseX = drop.x
+                    var baseY = drop.y
+                    for (var i = 0; i < drop.urls.length; i += 1) {
+                        root.addImage(drop.urls[i], baseX + i * 24, baseY + i * 24)
+                    }
+                }
             }
 
-            CanvasView {
-                id: canvasView
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                gridEnabled: root.gridEnabled
-                snapEnabled: root.snapEnabled
-                desaturateMode: root.desaturateMode
-                overlaySelection: root.overlaySelection
-                zoomLevel: root.zoomLevel
-                activeBoard: boardTabs.currentBoard
-                onItemSelected: root.selectedItem = item
+            TapHandler {
+                onTapped: root.selectedIndex = -1
             }
-        }
 
-        InspectorPanel {
-            SplitView.preferredWidth: 320
-            SplitView.minimumWidth: 280
-            selectedItem: root.selectedItem
-            alwaysOnTop: root.alwaysOnTop
-            clickThrough: root.clickThrough
-            overlaySelection: root.overlaySelection
-            desaturateMode: root.desaturateMode
-            gridEnabled: root.gridEnabled
-            snapEnabled: root.snapEnabled
-            onAlwaysOnTopToggled: root.alwaysOnTop = enabled
-            onClickThroughToggled: root.clickThrough = enabled
-            onOverlayToggled: root.overlaySelection = enabled
-            onDesaturateToggled: root.desaturateMode = enabled
-            onGridToggled: root.gridEnabled = enabled
-            onSnapToggled: root.snapEnabled = enabled
+            Repeater {
+                model: canvasModel
+                delegate: CanvasItem {
+                    x: xPos
+                    y: yPos
+                    width: itemWidth
+                    height: itemHeight
+                    scale: itemScale
+                    rotation: itemRotation
+                    kind: itemType
+                    imageSource: source
+                    titleText: title
+                    descriptionText: description
+                    noteText: noteText
+                    autoSize: autoSize
+                    selected: index === root.selectedIndex
+                    onActivated: root.selectedIndex = index
+                    onTitleEdited: canvasModel.setProperty(index, "title", text)
+                    onDescriptionEdited: canvasModel.setProperty(index, "description", text)
+                    onNoteEdited: canvasModel.setProperty(index, "noteText", text)
+                    onPositionRequested: {
+                        canvasModel.setProperty(index, "xPos", x)
+                        canvasModel.setProperty(index, "yPos", y)
+                    }
+                    onResizeRequested: {
+                        canvasModel.setProperty(index, "itemWidth", width)
+                        canvasModel.setProperty(index, "itemHeight", height)
+                    }
+                    onAutoSizeApplied: canvasModel.setProperty(index, "autoSize", false)
+                    onDragStarted: root.beginCardInteraction()
+                    onDragFinished: root.endCardInteraction()
+                }
+            }
+
+            Text {
+                visible: canvasModel.count === 0
+                text: "Drop images here to start your board"
+                color: "#94a3b8"
+                font.pixelSize: 16
+                anchors.centerIn: parent
+            }
         }
     }
 }

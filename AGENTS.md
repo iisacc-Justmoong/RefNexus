@@ -2,7 +2,8 @@
 
 ## Project Structure & Module Organization
 - `src/main.cpp` contains the Qt Quick application entry point.
-- `qml/Main.qml` holds the initial QML UI shell and placeholder copy.
+- `qml/Main.qml` provides the MVP window, toolbar, and canvas.
+- `qml/CanvasItem.qml` defines draggable image/note items.
 - `CMakeLists.txt` defines the CMake build, C++20 standard, and Qt6 dependencies.
 - `cmake-build-debug/` is an IDE-generated build output; treat it as local-only.
 

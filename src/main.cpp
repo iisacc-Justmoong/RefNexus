@@ -6,6 +6,7 @@ int main(int argc, char* argv[])
     QGuiApplication app(argc, argv);
 
     QQmlApplicationEngine engine;
+    engine.addImportPath("qrc:/qt/qml");
     engine.loadFromModule("RefNexus", "Main");
 
     if (engine.rootObjects().isEmpty()) {

@@ -18,7 +18,7 @@ find_package (Qt6 6.5 REQUIRED COMPONENTS
         QuickControls2
 )
 
-qt_standard_project_setup ()
+qt_standard_project_setup (REQUIRES 6.5)
 
 qt_add_executable (RefNexus
         MACOSX_BUNDLE
@@ -28,23 +28,12 @@ qt_add_executable (RefNexus
 qt_add_qml_module (RefNexus
         URI RefNexus
         VERSION 1.0
+        RESOURCE_PREFIX /qt/qml
         QML_FILES
         qml/Main.qml
-        qml/AppHeader.qml
-        qml/SidebarSection.qml
-        qml/LeftSidebar.qml
-        qml/BoardTabs.qml
-        qml/BoardToolbar.qml
-        qml/CanvasCard.qml
-        qml/CanvasView.qml
-        qml/InspectorPanel.qml
-        qml/StatusBar.qml
-        qml/SearchDrawer.qml
-        qml/CaptureDrawer.qml
-        qml/SettingsDialog.qml
-        qml/ImportDialog.qml
-        qml/ExportDialog.qml
-        qml/MigrationWizard.qml
+        qml/CanvasItem.qml
+        qml/ImageCardContent.qml
+        qml/NoteCardContent.qml
 )
 
 target_link_libraries (RefNexus
