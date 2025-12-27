@@ -1,0 +1,28 @@
+if(TARGET WrapOpenGL::WrapOpenGL)
+    set(WrapOpenGL_FOUND ON)
+    return()
+endif()
+
+set(WrapOpenGL_FOUND OFF)
+
+find_package(OpenGL ${WrapOpenGL_FIND_VERSION})
+
+if(OpenGL_FOUND)
+    add_library(WrapOpenGL::WrapOpenGL INTERFACE IMPORTED)
+    if(APPLE)
+        get_target_property(_qt_opengl_loc OpenGL::GL IMPORTED_LOCATION)
+        if(_qt_opengl_loc AND NOT _qt_opengl_loc MATCHES "/([^/]+)\\.framework$")
+            get_filename_component(_qt_opengl_fw "${_qt_opengl_loc}" DIRECTORY)
+        endif()
+        if(NOT _qt_opengl_fw)
+            set(_qt_opengl_fw "-framework OpenGL")
+        endif()
+        target_link_libraries(WrapOpenGL::WrapOpenGL INTERFACE ${_qt_opengl_fw})
+    else()
+        target_link_libraries(WrapOpenGL::WrapOpenGL INTERFACE OpenGL::GL)
+    endif()
+    set(WrapOpenGL_FOUND ON)
+endif()
+
+include(FindPackageHandleStandardArgs)
+find_package_handle_standard_args(WrapOpenGL DEFAULT_MSG WrapOpenGL_FOUND)
