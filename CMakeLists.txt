@@ -19,8 +19,10 @@ find_package (Qt6 6.5 REQUIRED COMPONENTS
 )
 
 qt_standard_project_setup (REQUIRES 6.5)
+qt_policy (SET QTP0004 NEW)
 
 qt_add_executable (RefNexus
+        MANUAL_FINALIZATION
         MACOSX_BUNDLE
         src/ImageTools.cpp
         src/ImageTools.h
@@ -35,6 +37,9 @@ qt_add_qml_module (RefNexus
         URI RefNexus
         VERSION 1.0
         RESOURCE_PREFIX /qt/qml
+        NO_IMPORT_SCAN
+        NO_GENERATE_QMLTYPES
+        NO_CACHEGEN
         QML_FILES
         qml/Main.qml
         qml/CanvasItem.qml
