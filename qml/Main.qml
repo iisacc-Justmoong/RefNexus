@@ -2,7 +2,6 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Dialogs
-import Qt.labs.settings
 
 ApplicationWindow {
     id: root
@@ -12,12 +11,13 @@ ApplicationWindow {
     color: "#0f172a"
 
     property bool alwaysOnTop: false
-    property int selectedIndex: -1
+    property string selectedId: ""
     property real canvasWidth: 4200
     property real canvasHeight: 2800
     property real canvasScale: 1.0
     property real minCanvasScale: 0.4
     property real maxCanvasScale: 2.5
+    property real noteCollapsedHeight: 40
     property int baseFlags: 0
     property bool updatingFlags: false
     property int activeCardInteractions: 0
@@ -36,16 +36,15 @@ ApplicationWindow {
         id: projectModel
     }
 
-    Settings {
-        id: projectSettings
-        category: "Projects"
-        property var storedProjects: []
+    function createId() {
+        return Math.random().toString(36).slice(2) + Date.now().toString(36)
     }
 
     function addImage(url, dropX, dropY) {
         var urlString = url.toString()
         var baseName = urlString.substring(urlString.lastIndexOf("/") + 1)
         canvasModel.append({
+            uid: createId(),
             itemType: "image",
             title: decodeURIComponent(baseName),
             description: "",
@@ -59,7 +58,9 @@ ApplicationWindow {
             itemScale: 1.0,
             itemRotation: 0,
             flipX: false,
-            flipY: false
+            flipY: false,
+            collapsed: false,
+            expandedHeight: 240
         })
     }
 
@@ -80,9 +81,26 @@ ApplicationWindow {
         canvasView.contentY = clampValue(y, 0, maxY)
     }
 
+    function indexForId(targetId) {
+        if (!targetId) {
+            return -1
+        }
+        for (var i = 0; i < canvasModel.count; i += 1) {
+            if (canvasModel.get(i).uid === targetId) {
+                return i
+            }
+        }
+        return -1
+    }
+
+    function selectionIndex() {
+        return indexForId(selectedId)
+    }
+
     function addNote() {
         var center = centerPosition()
         canvasModel.append({
+            uid: createId(),
             itemType: "note",
             title: "",
             description: "",
@@ -96,7 +114,9 @@ ApplicationWindow {
             itemScale: 1.0,
             itemRotation: 0,
             flipX: false,
-            flipY: false
+            flipY: false,
+            collapsed: false,
+            expandedHeight: 160
         })
     }
 
@@ -121,7 +141,13 @@ ApplicationWindow {
         var items = []
         for (var i = 0; i < canvasModel.count; i += 1) {
             var item = canvasModel.get(i)
+            var uid = item.uid
+            if (!uid) {
+                uid = createId()
+                canvasModel.setProperty(i, "uid", uid)
+            }
             items.push({
+                uid: uid,
                 itemType: item.itemType,
                 title: item.title,
                 description: item.description,
@@ -135,7 +161,11 @@ ApplicationWindow {
                 itemScale: item.itemScale,
                 itemRotation: item.itemRotation,
                 flipX: item.flipX,
-                flipY: item.flipY
+                flipY: item.flipY,
+                collapsed: item.collapsed === true,
+                expandedHeight: item.expandedHeight !== undefined
+                    ? item.expandedHeight
+                    : item.itemHeight
             })
         }
         return items
@@ -146,6 +176,7 @@ ApplicationWindow {
         for (var i = 0; i < items.length; i += 1) {
             var item = items[i]
             canvasModel.append({
+                uid: item.uid || createId(),
                 itemType: item.itemType || "note",
                 title: item.title || "",
                 description: item.description || "",
@@ -159,10 +190,14 @@ ApplicationWindow {
                 itemScale: item.itemScale !== undefined ? item.itemScale : 1.0,
                 itemRotation: item.itemRotation !== undefined ? item.itemRotation : 0,
                 flipX: item.flipX === true,
-                flipY: item.flipY === true
+                flipY: item.flipY === true,
+                collapsed: item.collapsed === true,
+                expandedHeight: item.expandedHeight !== undefined
+                    ? item.expandedHeight
+                    : (item.itemHeight !== undefined ? item.itemHeight : 160)
             })
         }
-        selectedIndex = -1
+        selectedId = ""
     }
 
     function normalizeProjectData(data) {
@@ -189,54 +224,95 @@ ApplicationWindow {
         return []
     }
 
-    function parseStoredProjects(raw) {
-        var stored = raw
-        if (typeof stored === "string") {
-            try {
-                stored = JSON.parse(stored)
-            } catch (err) {
-                stored = []
-            }
+    function refreshProjects() {
+        projectModel.clear()
+        if (!projectStore) {
+            return
         }
-        if (!stored || stored.length === undefined) {
-            stored = []
-        }
-        var projects = []
-        for (var i = 0; i < stored.length; i += 1) {
-            var entry = stored[i] || {}
-            projects.push({
-                name: entry.name || "Untitled",
-                data: normalizeProjectData(entry.data)
+        var projects = projectStore.projects
+        for (var i = 0; i < projects.length; i += 1) {
+            projectModel.append({
+                name: projects[i].name
             })
         }
-        return projects
+    }
+
+    function selectProjectByName(name) {
+        for (var i = 0; i < projectModel.count; i += 1) {
+            if (projectModel.get(i).name === name) {
+                selectedProjectIndex = i
+                return
+            }
+        }
+        selectedProjectIndex = -1
+    }
+
+    function removeItemById(itemId) {
+        var index = indexForId(itemId)
+        if (index < 0) {
+            return
+        }
+        canvasModel.remove(index)
+        if (selectedId === itemId) {
+            if (canvasModel.count === 0) {
+                selectedId = ""
+            } else {
+                var nextIndex = Math.min(index, canvasModel.count - 1)
+                selectedId = canvasModel.get(nextIndex).uid
+            }
+        }
+    }
+
+    function toggleCollapse(itemId, collapsed) {
+        var index = indexForId(itemId)
+        if (index < 0) {
+            return
+        }
+        var item = canvasModel.get(index)
+        if (item.itemType !== "note") {
+            return
+        }
+        if (collapsed) {
+            canvasModel.setProperty(index, "expandedHeight", item.itemHeight)
+            canvasModel.setProperty(index, "itemHeight", root.noteCollapsedHeight)
+            canvasModel.setProperty(index, "collapsed", true)
+        } else {
+            var restoredHeight = item.expandedHeight !== undefined
+                ? item.expandedHeight
+                : item.itemHeight
+            canvasModel.setProperty(index, "itemHeight", restoredHeight)
+            canvasModel.setProperty(index, "collapsed", false)
+        }
     }
 
     function hasSelection() {
-        return selectedIndex >= 0 && selectedIndex < canvasModel.count
+        return selectionIndex() >= 0
     }
 
     function isImageSelected() {
-        return hasSelection() && canvasModel.get(selectedIndex).itemType === "image"
+        var index = selectionIndex()
+        return index >= 0 && canvasModel.get(index).itemType === "image"
     }
 
-    function selectItem(index) {
-        if (index < 0 || index >= canvasModel.count) {
-            selectedIndex = -1
+    function selectItem(itemId) {
+        var index = indexForId(itemId)
+        if (index < 0) {
+            selectedId = ""
             return
         }
         var targetIndex = canvasModel.count - 1
         if (index !== targetIndex) {
             canvasModel.move(index, targetIndex, 1)
         }
-        selectedIndex = targetIndex
+        selectedId = itemId
     }
 
     function selectedLabel() {
-        if (!hasSelection()) {
+        var index = selectionIndex()
+        if (index < 0) {
             return "No selection"
         }
-        var item = canvasModel.get(selectedIndex)
+        var item = canvasModel.get(index)
         var name = item.title
         if (name === undefined || name.trim().length === 0) {
             name = item.itemType === "image" ? "Image" : "Note"
@@ -245,28 +321,33 @@ ApplicationWindow {
     }
 
     function flipSelected(horizontal) {
-        if (!hasSelection()) {
+        var index = selectionIndex()
+        if (index < 0) {
             return
         }
         var propertyName = horizontal ? "flipX" : "flipY"
-        var currentValue = canvasModel.get(selectedIndex)[propertyName] === true
-        canvasModel.setProperty(selectedIndex, propertyName, !currentValue)
+        var currentValue = canvasModel.get(index)[propertyName] === true
+        canvasModel.setProperty(index, propertyName, !currentValue)
     }
 
     function rotateSelected(angle) {
-        if (!hasSelection()) {
+        var index = selectionIndex()
+        if (index < 0) {
             return
         }
-        var current = canvasModel.get(selectedIndex).itemRotation || 0
-        canvasModel.setProperty(selectedIndex, "itemRotation", current + angle)
+        var current = canvasModel.get(index).itemRotation || 0
+        canvasModel.setProperty(index, "itemRotation", current + angle)
     }
 
     function duplicateSelected() {
-        if (!hasSelection()) {
+        var index = selectionIndex()
+        if (index < 0) {
             return
         }
-        var item = canvasModel.get(selectedIndex)
+        var item = canvasModel.get(index)
+        var newId = createId()
         canvasModel.append({
+            uid: newId,
             itemType: item.itemType,
             title: item.title || "",
             description: item.description || "",
@@ -280,84 +361,72 @@ ApplicationWindow {
             itemScale: item.itemScale !== undefined ? item.itemScale : 1.0,
             itemRotation: item.itemRotation !== undefined ? item.itemRotation : 0,
             flipX: item.flipX === true,
-            flipY: item.flipY === true
+            flipY: item.flipY === true,
+            collapsed: item.collapsed === true,
+            expandedHeight: item.expandedHeight !== undefined
+                ? item.expandedHeight
+                : item.itemHeight
         })
-        selectedIndex = canvasModel.count - 1
+        selectedId = newId
     }
 
     function deleteSelected() {
-        if (!hasSelection()) {
+        var index = selectionIndex()
+        if (index < 0) {
             return
         }
-        var removedIndex = selectedIndex
-        canvasModel.remove(removedIndex)
+        canvasModel.remove(index)
         if (canvasModel.count === 0) {
-            selectedIndex = -1
+            selectedId = ""
             return
         }
-        selectedIndex = Math.min(removedIndex, canvasModel.count - 1)
+        var nextIndex = Math.min(index, canvasModel.count - 1)
+        selectedId = canvasModel.get(nextIndex).uid
     }
 
     function bringSelectionForward() {
-        if (!hasSelection()) {
+        var index = selectionIndex()
+        if (index < 0) {
             return
         }
-        if (selectedIndex >= canvasModel.count - 1) {
+        if (index >= canvasModel.count - 1) {
             return
         }
-        canvasModel.move(selectedIndex, selectedIndex + 1, 1)
-        selectedIndex += 1
+        canvasModel.move(index, index + 1, 1)
     }
 
     function sendSelectionBackward() {
-        if (!hasSelection()) {
+        var index = selectionIndex()
+        if (index < 0) {
             return
         }
-        if (selectedIndex <= 0) {
+        if (index <= 0) {
             return
         }
-        canvasModel.move(selectedIndex, selectedIndex - 1, 1)
-        selectedIndex -= 1
+        canvasModel.move(index, index - 1, 1)
     }
 
     function bringSelectionToFront() {
-        if (!hasSelection()) {
+        var index = selectionIndex()
+        if (index < 0) {
             return
         }
         var targetIndex = canvasModel.count - 1
-        if (selectedIndex === targetIndex) {
+        if (index === targetIndex) {
             return
         }
-        canvasModel.move(selectedIndex, targetIndex, 1)
-        selectedIndex = targetIndex
+        canvasModel.move(index, targetIndex, 1)
     }
 
     function sendSelectionToBack() {
-        if (!hasSelection()) {
+        var index = selectionIndex()
+        if (index < 0) {
             return
         }
-        if (selectedIndex === 0) {
+        if (index === 0) {
             return
         }
-        canvasModel.move(selectedIndex, 0, 1)
-        selectedIndex = 0
-    }
-
-    function persistProjects() {
-        var stored = []
-        for (var i = 0; i < projectModel.count; i += 1) {
-            var entry = projectModel.get(i)
-            stored.push({ name: entry.name, data: entry.data })
-        }
-        projectSettings.storedProjects = JSON.stringify(stored)
-    }
-
-    function loadStoredProjects() {
-        projectModel.clear()
-        var stored = parseStoredProjects(projectSettings.storedProjects)
-        for (var i = 0; i < stored.length; i += 1) {
-            projectModel.append(stored[i])
-        }
+        canvasModel.move(index, 0, 1)
     }
 
     function saveProject(name) {
@@ -365,30 +434,24 @@ ApplicationWindow {
         if (trimmedName.length === 0) {
             return
         }
-        var data = serializeCanvasItems()
-        var existingIndex = -1
-        for (var i = 0; i < projectModel.count; i += 1) {
-            if (projectModel.get(i).name === trimmedName) {
-                existingIndex = i
-                break
-            }
+        if (!projectStore) {
+            return
         }
-        if (existingIndex >= 0) {
-            projectModel.setProperty(existingIndex, "data", data)
-            selectedProjectIndex = existingIndex
-        } else {
-            projectModel.append({ name: trimmedName, data: data })
-            selectedProjectIndex = projectModel.count - 1
+        if (!projectStore.saveProject(trimmedName, serializeCanvasItems())) {
+            return
         }
-        persistProjects()
+        refreshProjects()
+        selectProjectByName(trimmedName)
     }
 
     function loadProject(index) {
         if (index < 0 || index >= projectModel.count) {
             return
         }
-        var entry = projectModel.get(index)
-        var items = normalizeProjectData(entry.data)
+        if (!projectStore) {
+            return
+        }
+        var items = normalizeProjectData(projectStore.projectData(index))
         restoreCanvasItems(items)
         selectedProjectIndex = index
     }
@@ -396,8 +459,18 @@ ApplicationWindow {
     Component.onCompleted: {
         baseFlags = flags
         updateWindowFlags()
-        loadStoredProjects()
+        if (projectStore) {
+            projectStore.reload()
+        }
+        refreshProjects()
         keyScope.forceActiveFocus()
+    }
+
+    Connections {
+        target: projectStore
+        function onProjectsChanged() {
+            refreshProjects()
+        }
     }
 
     function beginCardInteraction() {
@@ -684,7 +757,7 @@ ApplicationWindow {
                 }
 
                 TapHandler {
-                    onTapped: root.selectedIndex = -1
+                    onTapped: root.selectedId = ""
                 }
 
                 Repeater {
@@ -698,14 +771,17 @@ ApplicationWindow {
                         rotation: itemRotation
                         flipHorizontal: flipX
                         flipVertical: flipY
+                        collapsed: collapsed
                         kind: itemType
                         imageSource: source
                         titleText: title
                         descriptionText: description
                         noteText: noteText
                         autoSize: autoSize
-                        selected: index === root.selectedIndex
-                        onActivated: root.selectItem(index)
+                        selected: uid === root.selectedId
+                        onActivated: root.selectItem(uid)
+                        onCloseRequested: root.removeItemById(uid)
+                        onCollapseRequested: root.toggleCollapse(uid, collapsed)
                         onTitleEdited: canvasModel.setProperty(index, "title", text)
                         onDescriptionEdited: canvasModel.setProperty(index, "description", text)
                         onNoteEdited: canvasModel.setProperty(index, "noteText", text)
@@ -719,7 +795,7 @@ ApplicationWindow {
                         }
                         onAutoSizeApplied: canvasModel.setProperty(index, "autoSize", false)
                         onDragStarted: {
-                            root.selectItem(index)
+                            root.selectItem(uid)
                             root.beginCardInteraction()
                         }
                         onDragFinished: root.endCardInteraction()

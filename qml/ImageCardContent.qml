@@ -24,6 +24,14 @@ Item {
             placeholderText: "Title"
             Layout.fillWidth: true
             text: root.titleText
+            Keys.onPressed: {
+                if (event.key === Qt.Key_Return
+                    || event.key === Qt.Key_Enter
+                    || event.key === Qt.Key_Escape) {
+                    titleField.focus = false
+                    event.accepted = true
+                }
+            }
             onTextChanged: {
                 if (activeFocus) {
                     root.titleEdited(text)
@@ -72,6 +80,14 @@ Item {
             color: "#e2e8f0"
             Layout.fillWidth: true
             Layout.preferredHeight: descriptionField.font.pixelSize + 12
+            Keys.onPressed: {
+                if (event.key === Qt.Key_Return
+                    || event.key === Qt.Key_Enter
+                    || event.key === Qt.Key_Escape) {
+                    descriptionField.focus = false
+                    event.accepted = true
+                }
+            }
             background: Rectangle {
                 color: "#0f172a"
                 radius: 6

@@ -23,6 +23,8 @@ qt_standard_project_setup (REQUIRES 6.5)
 qt_add_executable (RefNexus
         MACOSX_BUNDLE
         src/main.cpp
+        src/ProjectStore.cpp
+        src/ProjectStore.h
 )
 
 qt_add_qml_module (RefNexus
@@ -43,6 +45,7 @@ target_link_libraries (RefNexus
         Qt6::Quick
         Qt6::QuickControls2
 )
+
 
 set_target_properties (RefNexus PROPERTIES
         MACOSX_BUNDLE_GUI_IDENTIFIER "com.refnexus.app"

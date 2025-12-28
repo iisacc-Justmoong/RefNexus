@@ -14,6 +14,8 @@ Item {
     property bool resizing: false
     property bool flipHorizontal: false
     property bool flipVertical: false
+    property bool collapsed: false
+    property real dragBarHeight: 30
     property real minimumWidth: 1
     property real minimumHeight: 1
     signal activated()
@@ -25,9 +27,13 @@ Item {
     signal autoSizeApplied()
     signal dragStarted()
     signal dragFinished()
+    signal closeRequested()
+    signal collapseRequested(bool collapsed)
 
     property real dragStartX: 0
     property real dragStartY: 0
+    property real dragPressSceneX: 0
+    property real dragPressSceneY: 0
     property real resizeStartWidth: 0
     property real resizeStartHeight: 0
     property real resizeStartX: 0
@@ -35,7 +41,17 @@ Item {
     property real resizePressSceneX: 0
     property real resizePressSceneY: 0
     property string resizeEdge: ""
-    property real edgeHandleSize: 8
+    property real edgeHandleSize: 12
+    property real edgeGrabPadding: 8
+    property bool edgeHovering: leftResizeArea.containsMouse
+        || rightResizeArea.containsMouse
+        || topResizeArea.containsMouse
+        || bottomResizeArea.containsMouse
+        || topLeftResizeArea.containsMouse
+        || topRightResizeArea.containsMouse
+        || bottomLeftResizeArea.containsMouse
+        || bottomRightResizeArea.containsMouse
+        || resizeHandleMouse.containsMouse
 
     z: selected ? 2 : 1
     transform: Scale {
@@ -63,6 +79,36 @@ Item {
         root.resizeEdge = edge
         root.resizing = true
         root.dragStarted()
+    }
+
+    function scenePoint(mouseArea, mouse) {
+        var point = mouseArea.mapToItem(null, mouse.x, mouse.y)
+        return { x: point.x, y: point.y }
+    }
+
+    function beginMove(pressSceneX, pressSceneY) {
+        root.dragStartX = root.x
+        root.dragStartY = root.y
+        root.dragPressSceneX = pressSceneX
+        root.dragPressSceneY = pressSceneY
+        root.dragStarted()
+    }
+
+    function updateMove(currentSceneX, currentSceneY) {
+        var scaleFactor = root.scale
+        if (root.parent && root.parent.scale !== undefined) {
+            scaleFactor *= root.parent.scale
+        }
+        if (scaleFactor === 0) {
+            scaleFactor = 1
+        }
+        var deltaX = (currentSceneX - root.dragPressSceneX) / scaleFactor
+        var deltaY = (currentSceneY - root.dragPressSceneY) / scaleFactor
+        root.positionRequested(root.dragStartX + deltaX, root.dragStartY + deltaY)
+    }
+
+    function endMove() {
+        root.dragFinished()
     }
 
     function updateResize(currentSceneX, currentSceneY) {
@@ -115,10 +161,19 @@ Item {
         border.width: root.selected ? 2 : 1
     }
 
-    Loader {
-        id: contentLoader
-        anchors.fill: parent
-        sourceComponent: root.kind === "note" ? noteContent : imageContent
+    Item {
+        id: contentContainer
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: dragBar.bottom
+        anchors.bottom: parent.bottom
+        visible: !root.collapsed
+
+        Loader {
+            id: contentLoader
+            anchors.fill: parent
+            sourceComponent: root.kind === "note" ? noteContent : imageContent
+        }
     }
 
     Connections {
@@ -135,27 +190,6 @@ Item {
         }
     }
 
-    DragHandler {
-        id: dragHandler
-        target: null
-        enabled: !root.resizing
-        onActiveChanged: {
-            if (active) {
-                root.dragStartX = root.x
-                root.dragStartY = root.y
-                root.dragStarted()
-            } else {
-                root.dragFinished()
-            }
-        }
-        onTranslationChanged: {
-            if (active) {
-                root.positionRequested(root.dragStartX + translation.x,
-                    root.dragStartY + translation.y)
-            }
-        }
-    }
-
     PinchHandler {
         target: root
         minimumScale: 0.3
@@ -168,6 +202,113 @@ Item {
     }
 
     Rectangle {
+        id: dragBar
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        height: root.dragBarHeight
+        radius: 10
+        color: root.kind === "note" ? "#111827" : "#0f172a"
+        border.color: root.selected ? "#38bdf8" : "#1f2937"
+        border.width: 1
+        z: 6
+
+        RowLayout {
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.leftMargin: 8
+            spacing: 6
+            z: 2
+
+            ToolButton {
+                id: closeButton
+                visible: root.kind === "note"
+                hoverEnabled: true
+                implicitWidth: 14
+                implicitHeight: 14
+                onClicked: root.closeRequested()
+                ToolTip.text: "Close note"
+                ToolTip.delay: 1000
+                ToolTip.visible: hovered
+
+                contentItem: Text {
+                    text: "×"
+                    color: "#1f2937"
+                    font.pixelSize: 10
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
+                background: Rectangle {
+                    radius: 7
+                    color: "#ef4444"
+                    border.color: "#0f172a"
+                }
+            }
+
+            ToolButton {
+                id: collapseButton
+                visible: root.kind === "note"
+                hoverEnabled: true
+                implicitWidth: 14
+                implicitHeight: 14
+                onClicked: root.collapseRequested(!root.collapsed)
+                ToolTip.text: root.collapsed ? "Expand note" : "Collapse note"
+                ToolTip.delay: 1000
+                ToolTip.visible: hovered
+
+                contentItem: Text {
+                    text: root.collapsed ? "▸" : "▾"
+                    color: "#1f2937"
+                    font.pixelSize: 10
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
+                background: Rectangle {
+                    radius: 7
+                    color: "#facc15"
+                    border.color: "#0f172a"
+                }
+            }
+        }
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: 36
+            height: 4
+            radius: 2
+            color: "#334155"
+            opacity: 0.6
+            z: 1
+        }
+
+        MouseArea {
+            id: dragArea
+            anchors.fill: parent
+            hoverEnabled: true
+            preventStealing: true
+            cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+            z: 0
+            onPressed: function(mouse) {
+                root.activated()
+                var point = scenePoint(dragArea, mouse)
+                root.beginMove(point.x, point.y)
+            }
+            onPositionChanged: function(mouse) {
+                if (!pressed) {
+                    return
+                }
+                var point = scenePoint(dragArea, mouse)
+                root.updateMove(point.x, point.y)
+            }
+            onReleased: function(mouse) {
+                root.endMove()
+            }
+        }
+    }
+
+    Rectangle {
         id: resizeHandle
         width: 14
         height: 14
@@ -177,20 +318,127 @@ Item {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         anchors.margins: 6
-        visible: root.selected
+        visible: root.selected && !root.collapsed
 
         MouseArea {
+            id: resizeHandleMouse
             anchors.fill: parent
+            enabled: !root.collapsed
             cursorShape: Qt.SizeFDiagCursor
-            onPressed: {
-                root.beginResize("bottom-right", mouse.sceneX, mouse.sceneY)
+            preventStealing: true
+            onPressed: function(mouse) {
+                var point = scenePoint(resizeHandleMouse, mouse)
+                root.beginResize("bottom-right", point.x, point.y)
             }
-            onPositionChanged: {
-                root.updateResize(mouse.sceneX, mouse.sceneY)
+            onPositionChanged: function(mouse) {
+                var point = scenePoint(resizeHandleMouse, mouse)
+                root.updateResize(point.x, point.y)
             }
-            onReleased: {
+            onReleased: function(mouse) {
                 root.endResize()
             }
+        }
+    }
+
+    Item {
+        id: resizeOverlay
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.top: dragBar.bottom
+        visible: root.selected && !root.collapsed
+        z: 3
+
+        Rectangle {
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: root.edgeHandleSize + root.edgeGrabPadding
+            anchors.leftMargin: -root.edgeGrabPadding / 2
+            anchors.topMargin: -root.edgeGrabPadding / 2
+            anchors.bottomMargin: -root.edgeGrabPadding / 2
+            color: "#38bdf8"
+            opacity: 0.12
+        }
+
+        Rectangle {
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: root.edgeHandleSize + root.edgeGrabPadding
+            anchors.rightMargin: -root.edgeGrabPadding / 2
+            anchors.topMargin: -root.edgeGrabPadding / 2
+            anchors.bottomMargin: -root.edgeGrabPadding / 2
+            color: "#38bdf8"
+            opacity: 0.12
+        }
+
+        Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            height: root.edgeHandleSize + root.edgeGrabPadding
+            anchors.leftMargin: -root.edgeGrabPadding / 2
+            anchors.rightMargin: -root.edgeGrabPadding / 2
+            anchors.topMargin: -root.edgeGrabPadding / 2
+            color: "#38bdf8"
+            opacity: 0.12
+        }
+
+        Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: root.edgeHandleSize + root.edgeGrabPadding
+            anchors.leftMargin: -root.edgeGrabPadding / 2
+            anchors.rightMargin: -root.edgeGrabPadding / 2
+            anchors.bottomMargin: -root.edgeGrabPadding / 2
+            color: "#38bdf8"
+            opacity: 0.12
+        }
+
+        Rectangle {
+            anchors.left: parent.left
+            anchors.top: parent.top
+            width: root.edgeHandleSize * 2 + root.edgeGrabPadding
+            height: root.edgeHandleSize * 2 + root.edgeGrabPadding
+            anchors.leftMargin: -root.edgeGrabPadding / 2
+            anchors.topMargin: -root.edgeGrabPadding / 2
+            color: "#38bdf8"
+            opacity: 0.2
+        }
+
+        Rectangle {
+            anchors.right: parent.right
+            anchors.top: parent.top
+            width: root.edgeHandleSize * 2 + root.edgeGrabPadding
+            height: root.edgeHandleSize * 2 + root.edgeGrabPadding
+            anchors.rightMargin: -root.edgeGrabPadding / 2
+            anchors.topMargin: -root.edgeGrabPadding / 2
+            color: "#38bdf8"
+            opacity: 0.2
+        }
+
+        Rectangle {
+            anchors.left: parent.left
+            anchors.bottom: parent.bottom
+            width: root.edgeHandleSize * 2 + root.edgeGrabPadding
+            height: root.edgeHandleSize * 2 + root.edgeGrabPadding
+            anchors.leftMargin: -root.edgeGrabPadding / 2
+            anchors.bottomMargin: -root.edgeGrabPadding / 2
+            color: "#38bdf8"
+            opacity: 0.2
+        }
+
+        Rectangle {
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            width: root.edgeHandleSize * 2 + root.edgeGrabPadding
+            height: root.edgeHandleSize * 2 + root.edgeGrabPadding
+            anchors.rightMargin: -root.edgeGrabPadding / 2
+            anchors.bottomMargin: -root.edgeGrabPadding / 2
+            color: "#38bdf8"
+            opacity: 0.2
         }
     }
 
@@ -199,12 +447,26 @@ Item {
         anchors.left: parent.left
         anchors.top: parent.top
         anchors.bottom: parent.bottom
-        width: root.edgeHandleSize
+        width: root.edgeHandleSize + root.edgeGrabPadding
+        anchors.leftMargin: -root.edgeGrabPadding / 2
+        anchors.topMargin: -root.edgeGrabPadding / 2
+        anchors.bottomMargin: -root.edgeGrabPadding / 2
+        enabled: !root.collapsed
         hoverEnabled: true
+        preventStealing: true
         cursorShape: Qt.SizeHorCursor
-        onPressed: root.beginResize("left", mouse.sceneX, mouse.sceneY)
-        onPositionChanged: root.updateResize(mouse.sceneX, mouse.sceneY)
-        onReleased: root.endResize()
+        z: 4
+        onPressed: function(mouse) {
+            var point = scenePoint(leftResizeArea, mouse)
+            root.beginResize("left", point.x, point.y)
+        }
+        onPositionChanged: function(mouse) {
+            var point = scenePoint(leftResizeArea, mouse)
+            root.updateResize(point.x, point.y)
+        }
+        onReleased: function(mouse) {
+            root.endResize()
+        }
     }
 
     MouseArea {
@@ -212,12 +474,26 @@ Item {
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.bottom: parent.bottom
-        width: root.edgeHandleSize
+        width: root.edgeHandleSize + root.edgeGrabPadding
+        anchors.rightMargin: -root.edgeGrabPadding / 2
+        anchors.topMargin: -root.edgeGrabPadding / 2
+        anchors.bottomMargin: -root.edgeGrabPadding / 2
+        enabled: !root.collapsed
         hoverEnabled: true
+        preventStealing: true
         cursorShape: Qt.SizeHorCursor
-        onPressed: root.beginResize("right", mouse.sceneX, mouse.sceneY)
-        onPositionChanged: root.updateResize(mouse.sceneX, mouse.sceneY)
-        onReleased: root.endResize()
+        z: 4
+        onPressed: function(mouse) {
+            var point = scenePoint(rightResizeArea, mouse)
+            root.beginResize("right", point.x, point.y)
+        }
+        onPositionChanged: function(mouse) {
+            var point = scenePoint(rightResizeArea, mouse)
+            root.updateResize(point.x, point.y)
+        }
+        onReleased: function(mouse) {
+            root.endResize()
+        }
     }
 
     MouseArea {
@@ -225,12 +501,26 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        height: root.edgeHandleSize
+        height: root.edgeHandleSize + root.edgeGrabPadding
+        anchors.leftMargin: -root.edgeGrabPadding / 2
+        anchors.rightMargin: -root.edgeGrabPadding / 2
+        anchors.topMargin: -root.edgeGrabPadding / 2
+        enabled: !root.collapsed
         hoverEnabled: true
+        preventStealing: true
         cursorShape: Qt.SizeVerCursor
-        onPressed: root.beginResize("top", mouse.sceneX, mouse.sceneY)
-        onPositionChanged: root.updateResize(mouse.sceneX, mouse.sceneY)
-        onReleased: root.endResize()
+        z: 4
+        onPressed: function(mouse) {
+            var point = scenePoint(topResizeArea, mouse)
+            root.beginResize("top", point.x, point.y)
+        }
+        onPositionChanged: function(mouse) {
+            var point = scenePoint(topResizeArea, mouse)
+            root.updateResize(point.x, point.y)
+        }
+        onReleased: function(mouse) {
+            root.endResize()
+        }
     }
 
     MouseArea {
@@ -238,64 +528,130 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        height: root.edgeHandleSize
+        height: root.edgeHandleSize + root.edgeGrabPadding
+        anchors.leftMargin: -root.edgeGrabPadding / 2
+        anchors.rightMargin: -root.edgeGrabPadding / 2
+        anchors.bottomMargin: -root.edgeGrabPadding / 2
+        enabled: !root.collapsed
         hoverEnabled: true
+        preventStealing: true
         cursorShape: Qt.SizeVerCursor
-        onPressed: root.beginResize("bottom", mouse.sceneX, mouse.sceneY)
-        onPositionChanged: root.updateResize(mouse.sceneX, mouse.sceneY)
-        onReleased: root.endResize()
+        z: 4
+        onPressed: function(mouse) {
+            var point = scenePoint(bottomResizeArea, mouse)
+            root.beginResize("bottom", point.x, point.y)
+        }
+        onPositionChanged: function(mouse) {
+            var point = scenePoint(bottomResizeArea, mouse)
+            root.updateResize(point.x, point.y)
+        }
+        onReleased: function(mouse) {
+            root.endResize()
+        }
     }
 
     MouseArea {
         id: topLeftResizeArea
         anchors.left: parent.left
         anchors.top: parent.top
-        width: root.edgeHandleSize * 1.5
-        height: root.edgeHandleSize * 1.5
+        width: root.edgeHandleSize * 2 + root.edgeGrabPadding
+        height: root.edgeHandleSize * 2 + root.edgeGrabPadding
+        anchors.leftMargin: -root.edgeGrabPadding / 2
+        anchors.topMargin: -root.edgeGrabPadding / 2
+        enabled: !root.collapsed
         hoverEnabled: true
+        preventStealing: true
         cursorShape: Qt.SizeFDiagCursor
-        onPressed: root.beginResize("top-left", mouse.sceneX, mouse.sceneY)
-        onPositionChanged: root.updateResize(mouse.sceneX, mouse.sceneY)
-        onReleased: root.endResize()
+        z: 5
+        onPressed: function(mouse) {
+            var point = scenePoint(topLeftResizeArea, mouse)
+            root.beginResize("top-left", point.x, point.y)
+        }
+        onPositionChanged: function(mouse) {
+            var point = scenePoint(topLeftResizeArea, mouse)
+            root.updateResize(point.x, point.y)
+        }
+        onReleased: function(mouse) {
+            root.endResize()
+        }
     }
 
     MouseArea {
         id: topRightResizeArea
         anchors.right: parent.right
         anchors.top: parent.top
-        width: root.edgeHandleSize * 1.5
-        height: root.edgeHandleSize * 1.5
+        width: root.edgeHandleSize * 2 + root.edgeGrabPadding
+        height: root.edgeHandleSize * 2 + root.edgeGrabPadding
+        anchors.rightMargin: -root.edgeGrabPadding / 2
+        anchors.topMargin: -root.edgeGrabPadding / 2
+        enabled: !root.collapsed
         hoverEnabled: true
+        preventStealing: true
         cursorShape: Qt.SizeBDiagCursor
-        onPressed: root.beginResize("top-right", mouse.sceneX, mouse.sceneY)
-        onPositionChanged: root.updateResize(mouse.sceneX, mouse.sceneY)
-        onReleased: root.endResize()
+        z: 5
+        onPressed: function(mouse) {
+            var point = scenePoint(topRightResizeArea, mouse)
+            root.beginResize("top-right", point.x, point.y)
+        }
+        onPositionChanged: function(mouse) {
+            var point = scenePoint(topRightResizeArea, mouse)
+            root.updateResize(point.x, point.y)
+        }
+        onReleased: function(mouse) {
+            root.endResize()
+        }
     }
 
     MouseArea {
         id: bottomLeftResizeArea
         anchors.left: parent.left
         anchors.bottom: parent.bottom
-        width: root.edgeHandleSize * 1.5
-        height: root.edgeHandleSize * 1.5
+        width: root.edgeHandleSize * 2 + root.edgeGrabPadding
+        height: root.edgeHandleSize * 2 + root.edgeGrabPadding
+        anchors.leftMargin: -root.edgeGrabPadding / 2
+        anchors.bottomMargin: -root.edgeGrabPadding / 2
+        enabled: !root.collapsed
         hoverEnabled: true
+        preventStealing: true
         cursorShape: Qt.SizeBDiagCursor
-        onPressed: root.beginResize("bottom-left", mouse.sceneX, mouse.sceneY)
-        onPositionChanged: root.updateResize(mouse.sceneX, mouse.sceneY)
-        onReleased: root.endResize()
+        z: 5
+        onPressed: function(mouse) {
+            var point = scenePoint(bottomLeftResizeArea, mouse)
+            root.beginResize("bottom-left", point.x, point.y)
+        }
+        onPositionChanged: function(mouse) {
+            var point = scenePoint(bottomLeftResizeArea, mouse)
+            root.updateResize(point.x, point.y)
+        }
+        onReleased: function(mouse) {
+            root.endResize()
+        }
     }
 
     MouseArea {
         id: bottomRightResizeArea
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        width: root.edgeHandleSize * 1.5
-        height: root.edgeHandleSize * 1.5
+        width: root.edgeHandleSize * 2 + root.edgeGrabPadding
+        height: root.edgeHandleSize * 2 + root.edgeGrabPadding
+        anchors.rightMargin: -root.edgeGrabPadding / 2
+        anchors.bottomMargin: -root.edgeGrabPadding / 2
+        enabled: !root.collapsed
         hoverEnabled: true
+        preventStealing: true
         cursorShape: Qt.SizeFDiagCursor
-        onPressed: root.beginResize("bottom-right", mouse.sceneX, mouse.sceneY)
-        onPositionChanged: root.updateResize(mouse.sceneX, mouse.sceneY)
-        onReleased: root.endResize()
+        z: 5
+        onPressed: function(mouse) {
+            var point = scenePoint(bottomRightResizeArea, mouse)
+            root.beginResize("bottom-right", point.x, point.y)
+        }
+        onPositionChanged: function(mouse) {
+            var point = scenePoint(bottomRightResizeArea, mouse)
+            root.updateResize(point.x, point.y)
+        }
+        onReleased: function(mouse) {
+            root.endResize()
+        }
     }
 
     Component {
