@@ -10,7 +10,6 @@ ApplicationWindow {
     height: 800
     visible: true
     color: "#0f172a"
-    focus: true
 
     property bool alwaysOnTop: false
     property int selectedIndex: -1
@@ -166,12 +165,71 @@ ApplicationWindow {
         selectedIndex = -1
     }
 
+    function normalizeProjectData(data) {
+        if (data === undefined || data === null) {
+            return []
+        }
+        if (typeof data === "string") {
+            try {
+                return JSON.parse(data)
+            } catch (err) {
+                return []
+            }
+        }
+        if (Array.isArray(data)) {
+            return data
+        }
+        if (data.length !== undefined) {
+            var list = []
+            for (var i = 0; i < data.length; i += 1) {
+                list.push(data[i])
+            }
+            return list
+        }
+        return []
+    }
+
+    function parseStoredProjects(raw) {
+        var stored = raw
+        if (typeof stored === "string") {
+            try {
+                stored = JSON.parse(stored)
+            } catch (err) {
+                stored = []
+            }
+        }
+        if (!stored || stored.length === undefined) {
+            stored = []
+        }
+        var projects = []
+        for (var i = 0; i < stored.length; i += 1) {
+            var entry = stored[i] || {}
+            projects.push({
+                name: entry.name || "Untitled",
+                data: normalizeProjectData(entry.data)
+            })
+        }
+        return projects
+    }
+
     function hasSelection() {
         return selectedIndex >= 0 && selectedIndex < canvasModel.count
     }
 
     function isImageSelected() {
         return hasSelection() && canvasModel.get(selectedIndex).itemType === "image"
+    }
+
+    function selectItem(index) {
+        if (index < 0 || index >= canvasModel.count) {
+            selectedIndex = -1
+            return
+        }
+        var targetIndex = canvasModel.count - 1
+        if (index !== targetIndex) {
+            canvasModel.move(index, targetIndex, 1)
+        }
+        selectedIndex = targetIndex
     }
 
     function selectedLabel() {
@@ -240,28 +298,63 @@ ApplicationWindow {
         selectedIndex = Math.min(removedIndex, canvasModel.count - 1)
     }
 
+    function bringSelectionForward() {
+        if (!hasSelection()) {
+            return
+        }
+        if (selectedIndex >= canvasModel.count - 1) {
+            return
+        }
+        canvasModel.move(selectedIndex, selectedIndex + 1, 1)
+        selectedIndex += 1
+    }
+
+    function sendSelectionBackward() {
+        if (!hasSelection()) {
+            return
+        }
+        if (selectedIndex <= 0) {
+            return
+        }
+        canvasModel.move(selectedIndex, selectedIndex - 1, 1)
+        selectedIndex -= 1
+    }
+
+    function bringSelectionToFront() {
+        if (!hasSelection()) {
+            return
+        }
+        var targetIndex = canvasModel.count - 1
+        if (selectedIndex === targetIndex) {
+            return
+        }
+        canvasModel.move(selectedIndex, targetIndex, 1)
+        selectedIndex = targetIndex
+    }
+
+    function sendSelectionToBack() {
+        if (!hasSelection()) {
+            return
+        }
+        if (selectedIndex === 0) {
+            return
+        }
+        canvasModel.move(selectedIndex, 0, 1)
+        selectedIndex = 0
+    }
+
     function persistProjects() {
         var stored = []
         for (var i = 0; i < projectModel.count; i += 1) {
             var entry = projectModel.get(i)
             stored.push({ name: entry.name, data: entry.data })
         }
-        projectSettings.storedProjects = stored
+        projectSettings.storedProjects = JSON.stringify(stored)
     }
 
     function loadStoredProjects() {
         projectModel.clear()
-        var stored = projectSettings.storedProjects
-        if (typeof stored === "string") {
-            try {
-                stored = JSON.parse(stored)
-            } catch (err) {
-                stored = []
-            }
-        }
-        if (!Array.isArray(stored)) {
-            stored = []
-        }
+        var stored = parseStoredProjects(projectSettings.storedProjects)
         for (var i = 0; i < stored.length; i += 1) {
             projectModel.append(stored[i])
         }
@@ -295,17 +388,7 @@ ApplicationWindow {
             return
         }
         var entry = projectModel.get(index)
-        var items = entry.data
-        if (typeof items === "string") {
-            try {
-                items = JSON.parse(items)
-            } catch (err) {
-                items = []
-            }
-        }
-        if (!Array.isArray(items)) {
-            items = []
-        }
+        var items = normalizeProjectData(entry.data)
         restoreCanvasItems(items)
         selectedProjectIndex = index
     }
@@ -314,6 +397,7 @@ ApplicationWindow {
         baseFlags = flags
         updateWindowFlags()
         loadStoredProjects()
+        keyScope.forceActiveFocus()
     }
 
     function beginCardInteraction() {
@@ -324,18 +408,72 @@ ApplicationWindow {
         activeCardInteractions = Math.max(0, activeCardInteractions - 1)
     }
 
-    Keys.onPressed: {
-        if (event.key === Qt.Key_Space && !event.isAutoRepeat) {
-            spacePanning = true
-            event.accepted = true
+    FocusScope {
+        id: keyScope
+        anchors.fill: parent
+        focus: true
+
+        Keys.onPressed: {
+            if (event.key === Qt.Key_Space && !event.isAutoRepeat) {
+                root.spacePanning = true
+                event.accepted = true
+            }
+        }
+
+        Keys.onReleased: {
+            if (event.key === Qt.Key_Space && !event.isAutoRepeat) {
+                root.spacePanning = false
+                event.accepted = true
+            }
         }
     }
 
-    Keys.onReleased: {
-        if (event.key === Qt.Key_Space && !event.isAutoRepeat) {
-            spacePanning = false
-            event.accepted = true
-        }
+    Shortcut {
+        sequence: "Ctrl+]"
+        context: Qt.ApplicationShortcut
+        onActivated: root.bringSelectionForward()
+    }
+
+    Shortcut {
+        sequence: "Ctrl+["
+        context: Qt.ApplicationShortcut
+        onActivated: root.sendSelectionBackward()
+    }
+
+    Shortcut {
+        sequence: "Ctrl+Shift+]"
+        context: Qt.ApplicationShortcut
+        onActivated: root.bringSelectionToFront()
+    }
+
+    Shortcut {
+        sequence: "Ctrl+Shift+["
+        context: Qt.ApplicationShortcut
+        onActivated: root.sendSelectionToBack()
+    }
+
+    Shortcut {
+        sequence: "Meta+]"
+        context: Qt.ApplicationShortcut
+        onActivated: root.bringSelectionForward()
+    }
+
+    Shortcut {
+        sequence: "Meta+["
+        context: Qt.ApplicationShortcut
+        onActivated: root.sendSelectionBackward()
+    }
+
+    Shortcut {
+        sequence: "Meta+Shift+]"
+        context: Qt.ApplicationShortcut
+        onActivated: root.bringSelectionToFront()
+    }
+
+    Shortcut {
+        sequence: "Meta+Shift+["
+        context: Qt.ApplicationShortcut
+        onActivated: root.sendSelectionToBack()
     }
 
     onAlwaysOnTopChanged: updateWindowFlags()
@@ -353,12 +491,20 @@ ApplicationWindow {
             ToolButton {
                 text: "Add Image"
                 onClicked: imageDialog.open()
+                hoverEnabled: true
+                ToolTip.text: "Add images to the canvas"
+                ToolTip.delay: 1000
+                ToolTip.visible: hovered
                 Layout.leftMargin: 12
             }
 
             ToolButton {
                 text: "Add Note"
                 onClicked: root.addNote()
+                hoverEnabled: true
+                ToolTip.text: "Add a note card"
+                ToolTip.delay: 1000
+                ToolTip.visible: hovered
             }
 
             Item {
@@ -370,6 +516,10 @@ ApplicationWindow {
                 checkable: true
                 checked: root.alwaysOnTop
                 onToggled: root.alwaysOnTop = checked
+                hoverEnabled: true
+                ToolTip.text: "Toggle always on top"
+                ToolTip.delay: 1000
+                ToolTip.visible: hovered
             }
 
         }
@@ -414,12 +564,20 @@ ApplicationWindow {
                     id: projectNameField
                     placeholderText: "Project name"
                     Layout.fillWidth: true
+                    hoverEnabled: true
+                    ToolTip.text: "Enter a name for saving"
+                    ToolTip.delay: 1000
+                    ToolTip.visible: hovered
                 }
 
                 Button {
                     text: "Save Project"
                     Layout.fillWidth: true
                     enabled: projectNameField.text.trim().length > 0
+                    hoverEnabled: true
+                    ToolTip.text: "Save the current canvas"
+                    ToolTip.delay: 1000
+                    ToolTip.visible: hovered
                     onClicked: saveProject(projectNameField.text)
                 }
 
@@ -439,6 +597,10 @@ ApplicationWindow {
                         width: ListView.view.width
                         text: name
                         highlighted: index === root.selectedProjectIndex
+                        hoverEnabled: true
+                        ToolTip.text: "Load project: " + name
+                        ToolTip.delay: 1000
+                        ToolTip.visible: hovered
                         onClicked: {
                             projectNameField.text = name
                             root.loadProject(index)
@@ -543,7 +705,7 @@ ApplicationWindow {
                         noteText: noteText
                         autoSize: autoSize
                         selected: index === root.selectedIndex
-                        onActivated: root.selectedIndex = index
+                        onActivated: root.selectItem(index)
                         onTitleEdited: canvasModel.setProperty(index, "title", text)
                         onDescriptionEdited: canvasModel.setProperty(index, "description", text)
                         onNoteEdited: canvasModel.setProperty(index, "noteText", text)
@@ -556,7 +718,10 @@ ApplicationWindow {
                             canvasModel.setProperty(index, "itemHeight", height)
                         }
                         onAutoSizeApplied: canvasModel.setProperty(index, "autoSize", false)
-                        onDragStarted: root.beginCardInteraction()
+                        onDragStarted: {
+                            root.selectItem(index)
+                            root.beginCardInteraction()
+                        }
                         onDragFinished: root.endCardInteraction()
                     }
                 }
@@ -630,6 +795,10 @@ ApplicationWindow {
                     text: "Flip Horizontal"
                     Layout.fillWidth: true
                     enabled: root.isImageSelected()
+                    hoverEnabled: true
+                    ToolTip.text: "Flip image horizontally"
+                    ToolTip.delay: 1000
+                    ToolTip.visible: hovered
                     onClicked: root.flipSelected(true)
                 }
 
@@ -637,6 +806,10 @@ ApplicationWindow {
                     text: "Flip Vertical"
                     Layout.fillWidth: true
                     enabled: root.isImageSelected()
+                    hoverEnabled: true
+                    ToolTip.text: "Flip image vertically"
+                    ToolTip.delay: 1000
+                    ToolTip.visible: hovered
                     onClicked: root.flipSelected(false)
                 }
 
@@ -648,6 +821,10 @@ ApplicationWindow {
                         text: "Rotate Left"
                         Layout.fillWidth: true
                         enabled: root.hasSelection()
+                        hoverEnabled: true
+                        ToolTip.text: "Rotate selection -90°"
+                        ToolTip.delay: 1000
+                        ToolTip.visible: hovered
                         onClicked: root.rotateSelected(-90)
                     }
 
@@ -655,6 +832,10 @@ ApplicationWindow {
                         text: "Rotate Right"
                         Layout.fillWidth: true
                         enabled: root.hasSelection()
+                        hoverEnabled: true
+                        ToolTip.text: "Rotate selection +90°"
+                        ToolTip.delay: 1000
+                        ToolTip.visible: hovered
                         onClicked: root.rotateSelected(90)
                     }
                 }
@@ -669,13 +850,75 @@ ApplicationWindow {
                     text: "Duplicate"
                     Layout.fillWidth: true
                     enabled: root.hasSelection()
+                    hoverEnabled: true
+                    ToolTip.text: "Duplicate selection"
+                    ToolTip.delay: 1000
+                    ToolTip.visible: hovered
                     onClicked: root.duplicateSelected()
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    Button {
+                        text: "Forward"
+                        Layout.fillWidth: true
+                        enabled: root.hasSelection()
+                        hoverEnabled: true
+                        ToolTip.text: "Bring forward (Ctrl/Cmd + ])"
+                        ToolTip.delay: 1000
+                        ToolTip.visible: hovered
+                        onClicked: root.bringSelectionForward()
+                    }
+
+                    Button {
+                        text: "Backward"
+                        Layout.fillWidth: true
+                        enabled: root.hasSelection()
+                        hoverEnabled: true
+                        ToolTip.text: "Send backward (Ctrl/Cmd + [)"
+                        ToolTip.delay: 1000
+                        ToolTip.visible: hovered
+                        onClicked: root.sendSelectionBackward()
+                    }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    Button {
+                        text: "To Front"
+                        Layout.fillWidth: true
+                        enabled: root.hasSelection()
+                        hoverEnabled: true
+                        ToolTip.text: "Bring to front (Ctrl/Cmd + Shift + ])"
+                        ToolTip.delay: 1000
+                        ToolTip.visible: hovered
+                        onClicked: root.bringSelectionToFront()
+                    }
+
+                    Button {
+                        text: "To Back"
+                        Layout.fillWidth: true
+                        enabled: root.hasSelection()
+                        hoverEnabled: true
+                        ToolTip.text: "Send to back (Ctrl/Cmd + Shift + [)"
+                        ToolTip.delay: 1000
+                        ToolTip.visible: hovered
+                        onClicked: root.sendSelectionToBack()
+                    }
                 }
 
                 Button {
                     text: "Delete"
                     Layout.fillWidth: true
                     enabled: root.hasSelection()
+                    hoverEnabled: true
+                    ToolTip.text: "Delete selection"
+                    ToolTip.delay: 1000
+                    ToolTip.visible: hovered
                     onClicked: root.deleteSelected()
                 }
 

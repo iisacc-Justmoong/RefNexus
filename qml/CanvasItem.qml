@@ -32,8 +32,8 @@ Item {
     property real resizeStartHeight: 0
     property real resizeStartX: 0
     property real resizeStartY: 0
-    property real resizePressX: 0
-    property real resizePressY: 0
+    property real resizePressSceneX: 0
+    property real resizePressSceneY: 0
     property string resizeEdge: ""
     property real edgeHandleSize: 8
 
@@ -45,24 +45,39 @@ Item {
         yScale: root.flipVertical ? -1 : 1
     }
 
-    function beginResize(edge, pressX, pressY) {
+    HoverHandler {
+        id: hoverHandler
+    }
+
+    ToolTip.text: "Click to select. Drag to move. Drag edges to resize."
+    ToolTip.delay: 1000
+    ToolTip.visible: hoverHandler.hovered
+
+    function beginResize(edge, pressSceneX, pressSceneY) {
         root.resizeStartWidth = root.width
         root.resizeStartHeight = root.height
         root.resizeStartX = root.x
         root.resizeStartY = root.y
-        root.resizePressX = pressX
-        root.resizePressY = pressY
+        root.resizePressSceneX = pressSceneX
+        root.resizePressSceneY = pressSceneY
         root.resizeEdge = edge
         root.resizing = true
         root.dragStarted()
     }
 
-    function updateResize(currentX, currentY) {
+    function updateResize(currentSceneX, currentSceneY) {
         if (!root.resizing) {
             return
         }
-        var deltaX = currentX - root.resizePressX
-        var deltaY = currentY - root.resizePressY
+        var scaleFactor = root.scale
+        if (root.parent && root.parent.scale !== undefined) {
+            scaleFactor *= root.parent.scale
+        }
+        if (scaleFactor === 0) {
+            scaleFactor = 1
+        }
+        var deltaX = (currentSceneX - root.resizePressSceneX) / scaleFactor
+        var deltaY = (currentSceneY - root.resizePressSceneY) / scaleFactor
         var newWidth = root.resizeStartWidth
         var newHeight = root.resizeStartHeight
         var newX = root.resizeStartX
@@ -168,10 +183,10 @@ Item {
             anchors.fill: parent
             cursorShape: Qt.SizeFDiagCursor
             onPressed: {
-                root.beginResize("bottom-right", mouse.x, mouse.y)
+                root.beginResize("bottom-right", mouse.sceneX, mouse.sceneY)
             }
             onPositionChanged: {
-                root.updateResize(mouse.x, mouse.y)
+                root.updateResize(mouse.sceneX, mouse.sceneY)
             }
             onReleased: {
                 root.endResize()
@@ -187,8 +202,8 @@ Item {
         width: root.edgeHandleSize
         hoverEnabled: true
         cursorShape: Qt.SizeHorCursor
-        onPressed: root.beginResize("left", mouse.x, mouse.y)
-        onPositionChanged: root.updateResize(mouse.x, mouse.y)
+        onPressed: root.beginResize("left", mouse.sceneX, mouse.sceneY)
+        onPositionChanged: root.updateResize(mouse.sceneX, mouse.sceneY)
         onReleased: root.endResize()
     }
 
@@ -200,8 +215,8 @@ Item {
         width: root.edgeHandleSize
         hoverEnabled: true
         cursorShape: Qt.SizeHorCursor
-        onPressed: root.beginResize("right", mouse.x, mouse.y)
-        onPositionChanged: root.updateResize(mouse.x, mouse.y)
+        onPressed: root.beginResize("right", mouse.sceneX, mouse.sceneY)
+        onPositionChanged: root.updateResize(mouse.sceneX, mouse.sceneY)
         onReleased: root.endResize()
     }
 
@@ -213,8 +228,8 @@ Item {
         height: root.edgeHandleSize
         hoverEnabled: true
         cursorShape: Qt.SizeVerCursor
-        onPressed: root.beginResize("top", mouse.x, mouse.y)
-        onPositionChanged: root.updateResize(mouse.x, mouse.y)
+        onPressed: root.beginResize("top", mouse.sceneX, mouse.sceneY)
+        onPositionChanged: root.updateResize(mouse.sceneX, mouse.sceneY)
         onReleased: root.endResize()
     }
 
@@ -226,8 +241,8 @@ Item {
         height: root.edgeHandleSize
         hoverEnabled: true
         cursorShape: Qt.SizeVerCursor
-        onPressed: root.beginResize("bottom", mouse.x, mouse.y)
-        onPositionChanged: root.updateResize(mouse.x, mouse.y)
+        onPressed: root.beginResize("bottom", mouse.sceneX, mouse.sceneY)
+        onPositionChanged: root.updateResize(mouse.sceneX, mouse.sceneY)
         onReleased: root.endResize()
     }
 
@@ -239,8 +254,8 @@ Item {
         height: root.edgeHandleSize * 1.5
         hoverEnabled: true
         cursorShape: Qt.SizeFDiagCursor
-        onPressed: root.beginResize("top-left", mouse.x, mouse.y)
-        onPositionChanged: root.updateResize(mouse.x, mouse.y)
+        onPressed: root.beginResize("top-left", mouse.sceneX, mouse.sceneY)
+        onPositionChanged: root.updateResize(mouse.sceneX, mouse.sceneY)
         onReleased: root.endResize()
     }
 
@@ -252,8 +267,8 @@ Item {
         height: root.edgeHandleSize * 1.5
         hoverEnabled: true
         cursorShape: Qt.SizeBDiagCursor
-        onPressed: root.beginResize("top-right", mouse.x, mouse.y)
-        onPositionChanged: root.updateResize(mouse.x, mouse.y)
+        onPressed: root.beginResize("top-right", mouse.sceneX, mouse.sceneY)
+        onPositionChanged: root.updateResize(mouse.sceneX, mouse.sceneY)
         onReleased: root.endResize()
     }
 
@@ -265,8 +280,8 @@ Item {
         height: root.edgeHandleSize * 1.5
         hoverEnabled: true
         cursorShape: Qt.SizeBDiagCursor
-        onPressed: root.beginResize("bottom-left", mouse.x, mouse.y)
-        onPositionChanged: root.updateResize(mouse.x, mouse.y)
+        onPressed: root.beginResize("bottom-left", mouse.sceneX, mouse.sceneY)
+        onPositionChanged: root.updateResize(mouse.sceneX, mouse.sceneY)
         onReleased: root.endResize()
     }
 
@@ -278,8 +293,8 @@ Item {
         height: root.edgeHandleSize * 1.5
         hoverEnabled: true
         cursorShape: Qt.SizeFDiagCursor
-        onPressed: root.beginResize("bottom-right", mouse.x, mouse.y)
-        onPositionChanged: root.updateResize(mouse.x, mouse.y)
+        onPressed: root.beginResize("bottom-right", mouse.sceneX, mouse.sceneY)
+        onPositionChanged: root.updateResize(mouse.sceneX, mouse.sceneY)
         onReleased: root.endResize()
     }
 
