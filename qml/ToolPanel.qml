@@ -129,20 +129,19 @@ Rectangle {
                     ToolTip.visible: hovered
                     onToggled: root.snapToggled(checked)
                 }
-            }
 
-            Button {
-                display: AbstractButton.IconOnly
-                icon.source: "qrc:/qt/qml/RefNexus/resources/icon-fit.svg"
-                icon.width: 18
-                icon.height: 18
-                Layout.fillWidth: true
-                enabled: root.imageSelected
-                hoverEnabled: true
-                ToolTip.text: "Fit card to image"
-                ToolTip.delay: 1000
-                ToolTip.visible: hovered
-                onClicked: root.fitRequested()
+                ToolButton {
+                    display: AbstractButton.IconOnly
+                    icon.source: "qrc:/qt/qml/RefNexus/resources/icon-fit.svg"
+                    icon.width: 18
+                    icon.height: 18
+                    enabled: root.imageSelected
+                    hoverEnabled: true
+                    ToolTip.text: "Fit card to image"
+                    ToolTip.delay: 1000
+                    ToolTip.visible: hovered
+                    onClicked: root.fitRequested()
+                }
             }
         }
 

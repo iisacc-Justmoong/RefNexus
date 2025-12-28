@@ -409,6 +409,25 @@ ApplicationWindow {
         scheduleAutoSave()
     }
 
+    function applyLayoutMetrics(index, extraWidth, extraHeight) {
+        if (index < 0) {
+            return
+        }
+        var item = canvasModel.get(index)
+        var previousExtraHeight = item.contentExtraHeight !== undefined
+            ? item.contentExtraHeight
+            : 0
+        var updates = {
+            contentExtraWidth: extraWidth,
+            contentExtraHeight: extraHeight
+        }
+        if (!item.collapsed && !item.autoSize && previousExtraHeight > 0
+            && extraHeight > previousExtraHeight && item.itemHeight !== undefined) {
+            updates.itemHeight = item.itemHeight + (extraHeight - previousExtraHeight)
+        }
+        updateCanvasItem(index, updates)
+    }
+
     function applyFitSize(index, extraWidth, extraHeight) {
         if (index < 0) {
             return
@@ -1141,10 +1160,7 @@ ApplicationWindow {
                             root.toggleCollapse(uid, collapsedState)
                         }
                         onLayoutMetricsReady: function(extraWidth, extraHeight) {
-                            root.updateCanvasItem(index, {
-                                contentExtraWidth: extraWidth,
-                                contentExtraHeight: extraHeight
-                            })
+                            root.applyLayoutMetrics(index, extraWidth, extraHeight)
                         }
                         onDisplaySizeReady: function(width, height) {
                             root.updateCanvasItem(index, {
