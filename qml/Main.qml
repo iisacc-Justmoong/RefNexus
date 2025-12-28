@@ -8,7 +8,11 @@ ApplicationWindow {
     width: 1280
     height: 800
     visible: true
-    color: "#0f172a"
+    color: "#0b0d10"
+
+    onClosing: {
+        syncCurrentProject()
+    }
 
     property bool alwaysOnTop: false
     property string selectedId: ""
@@ -17,16 +21,21 @@ ApplicationWindow {
     property real canvasScale: 1.0
     property real minCanvasScale: 0.4
     property real maxCanvasScale: 2.5
-    property real noteCollapsedHeight: 40
+    property real collapsedHeight: 40
+    property bool leftSidebarCollapsed: false
+    property bool rightSidebarCollapsed: false
     property int baseFlags: 0
     property bool updatingFlags: false
     property int activeCardInteractions: 0
     property int selectedProjectIndex: -1
-    property bool spacePanning: false
+    property bool spacePanning: inputState ? inputState.spacePressed : false
     property real panStartX: 0
     property real panStartY: 0
     property real panStartContentX: 0
     property real panStartContentY: 0
+    property bool projectRestoring: false
+    property int editingProjectIndex: -1
+    property string editingProjectName: ""
 
     ListModel {
         id: canvasModel
@@ -34,6 +43,13 @@ ApplicationWindow {
 
     ListModel {
         id: projectModel
+    }
+
+    Timer {
+        id: autoSaveTimer
+        interval: 250
+        repeat: false
+        onTriggered: root.syncCurrentProject()
     }
 
     function createId() {
@@ -48,8 +64,7 @@ ApplicationWindow {
             itemType: "image",
             title: decodeURIComponent(baseName),
             description: "",
-            noteText: "",
-            source: url,
+            source: urlString,
             autoSize: true,
             xPos: dropX,
             yPos: dropY,
@@ -62,6 +77,7 @@ ApplicationWindow {
             collapsed: false,
             expandedHeight: 240
         })
+        scheduleAutoSave()
     }
 
     function centerPosition() {
@@ -81,6 +97,22 @@ ApplicationWindow {
         canvasView.contentY = clampValue(y, 0, maxY)
     }
 
+    function scheduleAutoSave() {
+        if (projectRestoring || !projectStore) {
+            return
+        }
+        autoSaveTimer.restart()
+        projectStore.updateCurrentProject(serializeCanvasItems())
+    }
+
+    function syncCurrentProject() {
+        if (projectRestoring || !projectStore) {
+            return
+        }
+        Qt.inputMethod.commit()
+        projectStore.updateCurrentProject(serializeCanvasItems())
+    }
+
     function indexForId(targetId) {
         if (!targetId) {
             return -1
@@ -97,28 +129,6 @@ ApplicationWindow {
         return indexForId(selectedId)
     }
 
-    function addNote() {
-        var center = centerPosition()
-        canvasModel.append({
-            uid: createId(),
-            itemType: "note",
-            title: "",
-            description: "",
-            noteText: "New note",
-            source: "",
-            autoSize: false,
-            xPos: center.x - 140,
-            yPos: center.y - 80,
-            itemWidth: 280,
-            itemHeight: 160,
-            itemScale: 1.0,
-            itemRotation: 0,
-            flipX: false,
-            flipY: false,
-            collapsed: false,
-            expandedHeight: 160
-        })
-    }
 
     function updateWindowFlags() {
         if (updatingFlags) {
@@ -151,7 +161,6 @@ ApplicationWindow {
                 itemType: item.itemType,
                 title: item.title,
                 description: item.description,
-                noteText: item.noteText,
                 source: item.source ? item.source.toString() : "",
                 autoSize: item.autoSize,
                 xPos: item.xPos,
@@ -175,12 +184,14 @@ ApplicationWindow {
         canvasModel.clear()
         for (var i = 0; i < items.length; i += 1) {
             var item = items[i]
+            if (item.itemType && item.itemType !== "image") {
+                continue
+            }
             canvasModel.append({
                 uid: item.uid || createId(),
-                itemType: item.itemType || "note",
+                itemType: "image",
                 title: item.title || "",
                 description: item.description || "",
-                noteText: item.noteText || "",
                 source: item.source || "",
                 autoSize: item.autoSize === undefined ? false : item.autoSize,
                 xPos: item.xPos !== undefined ? item.xPos : 0,
@@ -237,6 +248,44 @@ ApplicationWindow {
         }
     }
 
+    function loadCurrentProject() {
+        if (!projectStore) {
+            return
+        }
+        projectRestoring = true
+        restoreCanvasItems(normalizeProjectData(projectStore.currentProjectData()))
+        projectRestoring = false
+        selectedProjectIndex = projectStore.currentProjectIndex
+        editingProjectIndex = -1
+        editingProjectName = ""
+    }
+
+    function beginRenameProject(index) {
+        if (index < 0 || index >= projectModel.count) {
+            return
+        }
+        editingProjectIndex = index
+        editingProjectName = projectModel.get(index).name
+    }
+
+    function commitRenameProject() {
+        if (editingProjectIndex < 0) {
+            return
+        }
+        if (projectStore) {
+            projectStore.renameProject(editingProjectIndex, editingProjectName)
+        }
+        editingProjectIndex = -1
+        editingProjectName = ""
+        refreshProjects()
+        selectedProjectIndex = projectStore ? projectStore.currentProjectIndex : -1
+    }
+
+    function cancelRenameProject() {
+        editingProjectIndex = -1
+        editingProjectName = ""
+    }
+
     function selectProjectByName(name) {
         for (var i = 0; i < projectModel.count; i += 1) {
             if (projectModel.get(i).name === name) {
@@ -261,6 +310,7 @@ ApplicationWindow {
                 selectedId = canvasModel.get(nextIndex).uid
             }
         }
+        scheduleAutoSave()
     }
 
     function toggleCollapse(itemId, collapsed) {
@@ -269,12 +319,9 @@ ApplicationWindow {
             return
         }
         var item = canvasModel.get(index)
-        if (item.itemType !== "note") {
-            return
-        }
         if (collapsed) {
             canvasModel.setProperty(index, "expandedHeight", item.itemHeight)
-            canvasModel.setProperty(index, "itemHeight", root.noteCollapsedHeight)
+            canvasModel.setProperty(index, "itemHeight", root.collapsedHeight)
             canvasModel.setProperty(index, "collapsed", true)
         } else {
             var restoredHeight = item.expandedHeight !== undefined
@@ -283,6 +330,14 @@ ApplicationWindow {
             canvasModel.setProperty(index, "itemHeight", restoredHeight)
             canvasModel.setProperty(index, "collapsed", false)
         }
+        scheduleAutoSave()
+    }
+
+    function updateCanvasItem(index, updates) {
+        for (var key in updates) {
+            canvasModel.setProperty(index, key, updates[key])
+        }
+        scheduleAutoSave()
     }
 
     function hasSelection() {
@@ -303,6 +358,7 @@ ApplicationWindow {
         var targetIndex = canvasModel.count - 1
         if (index !== targetIndex) {
             canvasModel.move(index, targetIndex, 1)
+            scheduleAutoSave()
         }
         selectedId = itemId
     }
@@ -315,7 +371,7 @@ ApplicationWindow {
         var item = canvasModel.get(index)
         var name = item.title
         if (name === undefined || name.trim().length === 0) {
-            name = item.itemType === "image" ? "Image" : "Note"
+            name = "Image"
         }
         return "Selected: " + name
     }
@@ -328,6 +384,7 @@ ApplicationWindow {
         var propertyName = horizontal ? "flipX" : "flipY"
         var currentValue = canvasModel.get(index)[propertyName] === true
         canvasModel.setProperty(index, propertyName, !currentValue)
+        scheduleAutoSave()
     }
 
     function rotateSelected(angle) {
@@ -337,6 +394,7 @@ ApplicationWindow {
         }
         var current = canvasModel.get(index).itemRotation || 0
         canvasModel.setProperty(index, "itemRotation", current + angle)
+        scheduleAutoSave()
     }
 
     function duplicateSelected() {
@@ -351,7 +409,6 @@ ApplicationWindow {
             itemType: item.itemType,
             title: item.title || "",
             description: item.description || "",
-            noteText: item.noteText || "",
             source: item.source || "",
             autoSize: item.autoSize === undefined ? false : item.autoSize,
             xPos: item.xPos + 24,
@@ -368,6 +425,7 @@ ApplicationWindow {
                 : item.itemHeight
         })
         selectedId = newId
+        scheduleAutoSave()
     }
 
     function deleteSelected() {
@@ -382,6 +440,7 @@ ApplicationWindow {
         }
         var nextIndex = Math.min(index, canvasModel.count - 1)
         selectedId = canvasModel.get(nextIndex).uid
+        scheduleAutoSave()
     }
 
     function bringSelectionForward() {
@@ -393,6 +452,7 @@ ApplicationWindow {
             return
         }
         canvasModel.move(index, index + 1, 1)
+        scheduleAutoSave()
     }
 
     function sendSelectionBackward() {
@@ -404,6 +464,7 @@ ApplicationWindow {
             return
         }
         canvasModel.move(index, index - 1, 1)
+        scheduleAutoSave()
     }
 
     function bringSelectionToFront() {
@@ -416,6 +477,7 @@ ApplicationWindow {
             return
         }
         canvasModel.move(index, targetIndex, 1)
+        scheduleAutoSave()
     }
 
     function sendSelectionToBack() {
@@ -427,33 +489,48 @@ ApplicationWindow {
             return
         }
         canvasModel.move(index, 0, 1)
+        scheduleAutoSave()
     }
 
-    function saveProject(name) {
-        var trimmedName = name.trim()
-        if (trimmedName.length === 0) {
-            return
-        }
+    function createProject(name) {
         if (!projectStore) {
             return
         }
-        if (!projectStore.saveProject(trimmedName, serializeCanvasItems())) {
+        syncCurrentProject()
+        autoSaveTimer.stop()
+        if (!projectStore.createProject(name)) {
             return
         }
+        cancelRenameProject()
         refreshProjects()
-        selectProjectByName(trimmedName)
+        loadCurrentProject()
+    }
+
+    function deleteProject(index) {
+        if (!projectStore) {
+            return
+        }
+        if (!projectStore.deleteProject(index)) {
+            return
+        }
+        if (editingProjectIndex >= 0) {
+            cancelRenameProject()
+        }
+        refreshProjects()
+        loadCurrentProject()
     }
 
     function loadProject(index) {
-        if (index < 0 || index >= projectModel.count) {
-            return
-        }
         if (!projectStore) {
             return
         }
-        var items = normalizeProjectData(projectStore.projectData(index))
-        restoreCanvasItems(items)
-        selectedProjectIndex = index
+        syncCurrentProject()
+        autoSaveTimer.stop()
+        if (!projectStore.setCurrentProject(index)) {
+            return
+        }
+        cancelRenameProject()
+        loadCurrentProject()
     }
 
     Component.onCompleted: {
@@ -463,13 +540,14 @@ ApplicationWindow {
             projectStore.reload()
         }
         refreshProjects()
-        keyScope.forceActiveFocus()
+        loadCurrentProject()
     }
 
     Connections {
         target: projectStore
         function onProjectsChanged() {
             refreshProjects()
+            loadCurrentProject()
         }
     }
 
@@ -481,25 +559,6 @@ ApplicationWindow {
         activeCardInteractions = Math.max(0, activeCardInteractions - 1)
     }
 
-    FocusScope {
-        id: keyScope
-        anchors.fill: parent
-        focus: true
-
-        Keys.onPressed: {
-            if (event.key === Qt.Key_Space && !event.isAutoRepeat) {
-                root.spacePanning = true
-                event.accepted = true
-            }
-        }
-
-        Keys.onReleased: {
-            if (event.key === Qt.Key_Space && !event.isAutoRepeat) {
-                root.spacePanning = false
-                event.accepted = true
-            }
-        }
-    }
 
     Shortcut {
         sequence: "Ctrl+]"
@@ -553,8 +612,8 @@ ApplicationWindow {
 
     header: ToolBar {
         background: Rectangle {
-            color: "#0b1220"
-            border.color: "#1e293b"
+            color: "#0f1115"
+            border.color: "#1b1f26"
         }
 
         RowLayout {
@@ -562,7 +621,10 @@ ApplicationWindow {
             spacing: 10
 
             ToolButton {
-                text: "Add Image"
+                display: AbstractButton.IconOnly
+                icon.source: "qrc:/qt/qml/RefNexus/resources/icon-add-image.svg"
+                icon.width: 18
+                icon.height: 18
                 onClicked: imageDialog.open()
                 hoverEnabled: true
                 ToolTip.text: "Add images to the canvas"
@@ -571,21 +633,15 @@ ApplicationWindow {
                 Layout.leftMargin: 12
             }
 
-            ToolButton {
-                text: "Add Note"
-                onClicked: root.addNote()
-                hoverEnabled: true
-                ToolTip.text: "Add a note card"
-                ToolTip.delay: 1000
-                ToolTip.visible: hovered
-            }
-
             Item {
                 Layout.fillWidth: true
             }
 
             ToolButton {
-                text: "Top"
+                display: AbstractButton.IconOnly
+                icon.source: "qrc:/qt/qml/RefNexus/resources/icon-pin.svg"
+                icon.width: 18
+                icon.height: 18
                 checkable: true
                 checked: root.alwaysOnTop
                 onToggled: root.alwaysOnTop = checked
@@ -617,46 +673,89 @@ ApplicationWindow {
 
         Rectangle {
             id: sidebar
-            Layout.preferredWidth: 260
+            Layout.preferredWidth: root.leftSidebarCollapsed ? 40 : 260
+            Layout.minimumWidth: root.leftSidebarCollapsed ? 40 : 260
+            Layout.maximumWidth: root.leftSidebarCollapsed ? 40 : 260
             Layout.fillHeight: true
-            color: "#0b1220"
-            border.color: "#1e293b"
+            color: "#0f1115"
+            border.color: "#1b1f26"
+
+            Item {
+                id: leftSidebarHeader
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                height: 44
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.margins: 12
+                    spacing: 8
+                    visible: !root.leftSidebarCollapsed
+
+                    Label {
+                        text: "Projects"
+                        color: "#d7dbe0"
+                        font.pixelSize: 16
+                        Layout.fillWidth: true
+                    }
+
+                    ToolButton {
+                        display: AbstractButton.IconOnly
+                        icon.source: "qrc:/qt/qml/RefNexus/resources/icon-chevron-left.svg"
+                        icon.width: 16
+                        icon.height: 16
+                        hoverEnabled: true
+                        ToolTip.text: "Collapse sidebar"
+                        ToolTip.delay: 1000
+                        ToolTip.visible: hovered
+                        onClicked: root.leftSidebarCollapsed = true
+                    }
+                }
+
+                ToolButton {
+                    display: AbstractButton.IconOnly
+                    icon.source: "qrc:/qt/qml/RefNexus/resources/icon-chevron-right.svg"
+                    icon.width: 16
+                    icon.height: 16
+                    hoverEnabled: true
+                    ToolTip.text: "Expand sidebar"
+                    ToolTip.delay: 1000
+                    ToolTip.visible: hovered
+                    anchors.centerIn: parent
+                    visible: root.leftSidebarCollapsed
+                    onClicked: root.leftSidebarCollapsed = false
+                }
+            }
 
             ColumnLayout {
-                anchors.fill: parent
-                anchors.margins: 16
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: leftSidebarHeader.bottom
+                anchors.bottom: parent.bottom
+                anchors.leftMargin: 16
+                anchors.rightMargin: 16
+                anchors.topMargin: 8
+                anchors.bottomMargin: 16
                 spacing: 12
-
-                Label {
-                    text: "Projects"
-                    color: "#e2e8f0"
-                    font.pixelSize: 16
-                }
-
-                TextField {
-                    id: projectNameField
-                    placeholderText: "Project name"
-                    Layout.fillWidth: true
-                    hoverEnabled: true
-                    ToolTip.text: "Enter a name for saving"
-                    ToolTip.delay: 1000
-                    ToolTip.visible: hovered
-                }
+                visible: !root.leftSidebarCollapsed
 
                 Button {
-                    text: "Save Project"
+                    display: AbstractButton.IconOnly
+                    icon.source: "qrc:/qt/qml/RefNexus/resources/icon-new-project.svg"
+                    icon.width: 18
+                    icon.height: 18
                     Layout.fillWidth: true
-                    enabled: projectNameField.text.trim().length > 0
                     hoverEnabled: true
-                    ToolTip.text: "Save the current canvas"
+                    ToolTip.text: "Create a new Untitled project"
                     ToolTip.delay: 1000
                     ToolTip.visible: hovered
-                    onClicked: saveProject(projectNameField.text)
+                    onClicked: createProject("Untitled")
                 }
 
                 Label {
                     text: "Saved Sessions"
-                    color: "#94a3b8"
+                    color: "#8b9098"
                     font.pixelSize: 12
                 }
 
@@ -666,17 +765,121 @@ ApplicationWindow {
                     Layout.fillHeight: true
                     clip: true
                     model: projectModel
-                    delegate: ItemDelegate {
+                    focus: true
+                    Keys.onPressed: {
+                        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                            if (root.editingProjectIndex >= 0) {
+                                root.commitRenameProject()
+                            } else if (root.selectedProjectIndex >= 0) {
+                                root.beginRenameProject(root.selectedProjectIndex)
+                            }
+                            event.accepted = true
+                        } else if (event.key === Qt.Key_Escape) {
+                            root.cancelRenameProject()
+                            event.accepted = true
+                        }
+                    }
+                    delegate: Item {
+                        id: projectRow
                         width: ListView.view.width
-                        text: name
-                        highlighted: index === root.selectedProjectIndex
-                        hoverEnabled: true
-                        ToolTip.text: "Load project: " + name
-                        ToolTip.delay: 1000
-                        ToolTip.visible: hovered
-                        onClicked: {
-                            projectNameField.text = name
-                            root.loadProject(index)
+                        height: 34
+                        property bool editing: index === root.editingProjectIndex
+
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: 6
+                            color: index === root.selectedProjectIndex
+                                ? "#1b1f26"
+                                : "transparent"
+                        }
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.margins: 6
+                            spacing: 8
+
+                            Item {
+                                id: projectHitArea
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+
+                                Label {
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: name
+                                    color: "#d7dbe0"
+                                    elide: Text.ElideRight
+                                    visible: !projectRow.editing
+                                }
+
+                                TextField {
+                                    id: projectNameEditor
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: projectRow.editing ? root.editingProjectName : ""
+                                    visible: projectRow.editing
+                                    selectByMouse: true
+                                    onVisibleChanged: {
+                                        if (visible) {
+                                            forceActiveFocus()
+                                            selectAll()
+                                        }
+                                    }
+                                    onTextChanged: {
+                                        if (activeFocus) {
+                                            root.editingProjectName = text
+                                        }
+                                    }
+                                    Keys.onPressed: {
+                                        if (event.key === Qt.Key_Return
+                                            || event.key === Qt.Key_Enter) {
+                                            root.commitRenameProject()
+                                            event.accepted = true
+                                        } else if (event.key === Qt.Key_Escape) {
+                                            root.cancelRenameProject()
+                                            event.accepted = true
+                                        }
+                                    }
+                                    onEditingFinished: {
+                                        if (projectRow.editing) {
+                                            root.commitRenameProject()
+                                        }
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: projectSelectArea
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    enabled: !projectRow.editing
+                                    onClicked: {
+                                        projectList.forceActiveFocus()
+                                        root.loadProject(index)
+                                    }
+                                    onDoubleClicked: {
+                                        projectList.forceActiveFocus()
+                                        root.beginRenameProject(index)
+                                    }
+                                }
+
+                                ToolTip.text: "Load project: " + name
+                                ToolTip.delay: 1000
+                                ToolTip.visible: projectSelectArea.containsMouse
+                            }
+
+                            ToolButton {
+                                hoverEnabled: true
+                                display: AbstractButton.IconOnly
+                                icon.source: "qrc:/qt/qml/RefNexus/resources/icon-trash.svg"
+                                icon.width: 16
+                                icon.height: 16
+                                onClicked: root.deleteProject(index)
+                                ToolTip.text: "Delete project"
+                                ToolTip.delay: 1000
+                                ToolTip.visible: hovered
+                            }
                         }
                     }
                     ScrollBar.vertical: ScrollBar { }
@@ -685,7 +888,7 @@ ApplicationWindow {
                         anchors.centerIn: parent
                         visible: projectModel.count === 0
                         text: "No saved projects yet"
-                        color: "#64748b"
+                        color: "#8b9098"
                         font.pixelSize: 12
                     }
                 }
@@ -739,7 +942,7 @@ ApplicationWindow {
 
                 Rectangle {
                     anchors.fill: parent
-                    color: "#0b1220"
+                    color: "#0d1014"
                 }
 
                 DropArea {
@@ -768,32 +971,37 @@ ApplicationWindow {
                         width: itemWidth
                         height: itemHeight
                         scale: itemScale
-                        rotation: itemRotation
+                        imageRotation: itemRotation
                         flipHorizontal: flipX
                         flipVertical: flipY
-                        collapsed: collapsed
-                        kind: itemType
+                        collapsedState: collapsed
+                        canvasPanning: root.spacePanning
                         imageSource: source
                         titleText: title
                         descriptionText: description
-                        noteText: noteText
                         autoSize: autoSize
                         selected: uid === root.selectedId
                         onActivated: root.selectItem(uid)
                         onCloseRequested: root.removeItemById(uid)
-                        onCollapseRequested: root.toggleCollapse(uid, collapsed)
-                        onTitleEdited: canvasModel.setProperty(index, "title", text)
-                        onDescriptionEdited: canvasModel.setProperty(index, "description", text)
-                        onNoteEdited: canvasModel.setProperty(index, "noteText", text)
-                        onPositionRequested: {
-                            canvasModel.setProperty(index, "xPos", x)
-                            canvasModel.setProperty(index, "yPos", y)
+                        onCollapseRequested: function(collapsedState) {
+                            root.toggleCollapse(uid, collapsedState)
                         }
-                        onResizeRequested: {
-                            canvasModel.setProperty(index, "itemWidth", width)
-                            canvasModel.setProperty(index, "itemHeight", height)
+                        onTitleEdited: function(text) {
+                            root.updateCanvasItem(index, { title: text })
                         }
-                        onAutoSizeApplied: canvasModel.setProperty(index, "autoSize", false)
+                        onDescriptionEdited: function(text) {
+                            root.updateCanvasItem(index, { description: text })
+                        }
+                        onPositionRequested: function(x, y) {
+                            root.updateCanvasItem(index, { xPos: x, yPos: y })
+                        }
+                        onResizeRequested: function(width, height) {
+                            root.updateCanvasItem(index, {
+                                itemWidth: width,
+                                itemHeight: height
+                            })
+                        }
+                        onAutoSizeApplied: root.updateCanvasItem(index, { autoSize: false })
                         onDragStarted: {
                             root.selectItem(uid)
                             root.beginCardInteraction()
@@ -805,7 +1013,7 @@ ApplicationWindow {
                 Text {
                     visible: canvasModel.count === 0
                     text: "Drop images here to start your board"
-                    color: "#94a3b8"
+                    color: "#8b9098"
                     font.pixelSize: 16
                     anchors.centerIn: parent
                 }
@@ -817,6 +1025,8 @@ ApplicationWindow {
                 anchors.fill: parent
                 enabled: root.spacePanning
                 cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+                preventStealing: true
+                acceptedButtons: Qt.LeftButton
                 onPressed: {
                     root.panStartX = mouse.x
                     root.panStartY = mouse.y
@@ -837,25 +1047,76 @@ ApplicationWindow {
 
         Rectangle {
             id: toolPanel
-            Layout.preferredWidth: 240
+            Layout.preferredWidth: root.rightSidebarCollapsed ? 40 : 240
+            Layout.minimumWidth: root.rightSidebarCollapsed ? 40 : 240
+            Layout.maximumWidth: root.rightSidebarCollapsed ? 40 : 240
             Layout.fillHeight: true
-            color: "#0b1220"
-            border.color: "#1e293b"
+            color: "#0f1115"
+            border.color: "#1b1f26"
+
+            Item {
+                id: rightSidebarHeader
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                height: 44
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.margins: 12
+                    spacing: 8
+                    visible: !root.rightSidebarCollapsed
+
+                    ToolButton {
+                        display: AbstractButton.IconOnly
+                        icon.source: "qrc:/qt/qml/RefNexus/resources/icon-chevron-right.svg"
+                        icon.width: 16
+                        icon.height: 16
+                        hoverEnabled: true
+                        ToolTip.text: "Collapse sidebar"
+                        ToolTip.delay: 1000
+                        ToolTip.visible: hovered
+                        onClicked: root.rightSidebarCollapsed = true
+                    }
+
+                    Label {
+                        text: "Tools"
+                        color: "#d7dbe0"
+                        font.pixelSize: 16
+                        Layout.fillWidth: true
+                    }
+                }
+
+                ToolButton {
+                    display: AbstractButton.IconOnly
+                    icon.source: "qrc:/qt/qml/RefNexus/resources/icon-chevron-left.svg"
+                    icon.width: 16
+                    icon.height: 16
+                    hoverEnabled: true
+                    ToolTip.text: "Expand sidebar"
+                    ToolTip.delay: 1000
+                    ToolTip.visible: hovered
+                    anchors.centerIn: parent
+                    visible: root.rightSidebarCollapsed
+                    onClicked: root.rightSidebarCollapsed = false
+                }
+            }
 
             ColumnLayout {
-                anchors.fill: parent
-                anchors.margins: 16
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: rightSidebarHeader.bottom
+                anchors.bottom: parent.bottom
+                anchors.leftMargin: 16
+                anchors.rightMargin: 16
+                anchors.topMargin: 8
+                anchors.bottomMargin: 16
                 spacing: 10
-
-                Label {
-                    text: "Tools"
-                    color: "#e2e8f0"
-                    font.pixelSize: 16
-                }
+                visible: !root.rightSidebarCollapsed
 
                 Text {
                     text: root.selectedLabel()
-                    color: "#94a3b8"
+                    color: "#8b9098"
                     font.pixelSize: 12
                     wrapMode: Text.WordWrap
                     Layout.fillWidth: true
@@ -863,12 +1124,15 @@ ApplicationWindow {
 
                 Label {
                     text: "Transform"
-                    color: "#94a3b8"
+                    color: "#8b9098"
                     font.pixelSize: 12
                 }
 
                 Button {
-                    text: "Flip Horizontal"
+                    display: AbstractButton.IconOnly
+                    icon.source: "qrc:/qt/qml/RefNexus/resources/icon-flip-h.svg"
+                    icon.width: 18
+                    icon.height: 18
                     Layout.fillWidth: true
                     enabled: root.isImageSelected()
                     hoverEnabled: true
@@ -879,7 +1143,10 @@ ApplicationWindow {
                 }
 
                 Button {
-                    text: "Flip Vertical"
+                    display: AbstractButton.IconOnly
+                    icon.source: "qrc:/qt/qml/RefNexus/resources/icon-flip-v.svg"
+                    icon.width: 18
+                    icon.height: 18
                     Layout.fillWidth: true
                     enabled: root.isImageSelected()
                     hoverEnabled: true
@@ -894,7 +1161,10 @@ ApplicationWindow {
                     spacing: 8
 
                     Button {
-                        text: "Rotate Left"
+                        display: AbstractButton.IconOnly
+                        icon.source: "qrc:/qt/qml/RefNexus/resources/icon-rotate-left.svg"
+                        icon.width: 18
+                        icon.height: 18
                         Layout.fillWidth: true
                         enabled: root.hasSelection()
                         hoverEnabled: true
@@ -905,7 +1175,10 @@ ApplicationWindow {
                     }
 
                     Button {
-                        text: "Rotate Right"
+                        display: AbstractButton.IconOnly
+                        icon.source: "qrc:/qt/qml/RefNexus/resources/icon-rotate-right.svg"
+                        icon.width: 18
+                        icon.height: 18
                         Layout.fillWidth: true
                         enabled: root.hasSelection()
                         hoverEnabled: true
@@ -918,12 +1191,15 @@ ApplicationWindow {
 
                 Label {
                     text: "Actions"
-                    color: "#94a3b8"
+                    color: "#8b9098"
                     font.pixelSize: 12
                 }
 
                 Button {
-                    text: "Duplicate"
+                    display: AbstractButton.IconOnly
+                    icon.source: "qrc:/qt/qml/RefNexus/resources/icon-duplicate.svg"
+                    icon.width: 18
+                    icon.height: 18
                     Layout.fillWidth: true
                     enabled: root.hasSelection()
                     hoverEnabled: true
@@ -938,7 +1214,10 @@ ApplicationWindow {
                     spacing: 8
 
                     Button {
-                        text: "Forward"
+                        display: AbstractButton.IconOnly
+                        icon.source: "qrc:/qt/qml/RefNexus/resources/icon-forward.svg"
+                        icon.width: 18
+                        icon.height: 18
                         Layout.fillWidth: true
                         enabled: root.hasSelection()
                         hoverEnabled: true
@@ -949,7 +1228,10 @@ ApplicationWindow {
                     }
 
                     Button {
-                        text: "Backward"
+                        display: AbstractButton.IconOnly
+                        icon.source: "qrc:/qt/qml/RefNexus/resources/icon-backward.svg"
+                        icon.width: 18
+                        icon.height: 18
                         Layout.fillWidth: true
                         enabled: root.hasSelection()
                         hoverEnabled: true
@@ -965,7 +1247,10 @@ ApplicationWindow {
                     spacing: 8
 
                     Button {
-                        text: "To Front"
+                        display: AbstractButton.IconOnly
+                        icon.source: "qrc:/qt/qml/RefNexus/resources/icon-front.svg"
+                        icon.width: 18
+                        icon.height: 18
                         Layout.fillWidth: true
                         enabled: root.hasSelection()
                         hoverEnabled: true
@@ -976,7 +1261,10 @@ ApplicationWindow {
                     }
 
                     Button {
-                        text: "To Back"
+                        display: AbstractButton.IconOnly
+                        icon.source: "qrc:/qt/qml/RefNexus/resources/icon-back.svg"
+                        icon.width: 18
+                        icon.height: 18
                         Layout.fillWidth: true
                         enabled: root.hasSelection()
                         hoverEnabled: true
@@ -988,7 +1276,10 @@ ApplicationWindow {
                 }
 
                 Button {
-                    text: "Delete"
+                    display: AbstractButton.IconOnly
+                    icon.source: "qrc:/qt/qml/RefNexus/resources/icon-trash.svg"
+                    icon.width: 18
+                    icon.height: 18
                     Layout.fillWidth: true
                     enabled: root.hasSelection()
                     hoverEnabled: true

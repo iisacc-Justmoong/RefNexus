@@ -8,10 +8,12 @@
 #include <QJSValue>
 #include <QSettings>
 #include <QSet>
+#include <QUrl>
 #include <QUuid>
 
 namespace {
 constexpr const char kProjectsKey[] = "Projects/Stored";
+constexpr const char kCurrentProjectKey[] = "Projects/Current";
 }
 
 ProjectStore::ProjectStore(QObject* parent)
@@ -25,36 +27,123 @@ QVariantList ProjectStore::projects() const
     return toVariantList(m_projects);
 }
 
+QString ProjectStore::currentProject() const
+{
+    return m_currentProjectName;
+}
+
+int ProjectStore::currentProjectIndex() const
+{
+    return indexOfProject(m_currentProjectName);
+}
+
 void ProjectStore::reload()
 {
     loadFromSettings();
 }
 
-bool ProjectStore::saveProject(const QString& name, const QVariantList& items)
+bool ProjectStore::createProject(const QString& name)
 {
+    const QString projectName = makeUniqueName(name);
+    if (projectName.isEmpty()) {
+        return false;
+    }
+
+    m_projects.push_back({ projectName, {} });
+    setCurrentProjectName(projectName);
+    saveToSettings();
+    emit projectsChanged();
+    return true;
+}
+
+bool ProjectStore::deleteProject(int index)
+{
+    if (index < 0 || index >= m_projects.size()) {
+        return false;
+    }
+    const QString removedName = m_projects.at(index).name;
+    m_projects.removeAt(index);
+    if (m_projects.isEmpty()) {
+        m_projects.push_back({ defaultProjectName(), {} });
+    }
+    if (removedName == m_currentProjectName) {
+        setCurrentProjectName(m_projects.front().name);
+    }
+    saveToSettings();
+    emit projectsChanged();
+    return true;
+}
+
+bool ProjectStore::renameProject(int index, const QString& name)
+{
+    if (index < 0 || index >= m_projects.size()) {
+        return false;
+    }
+
     const QString trimmed = name.trimmed();
     if (trimmed.isEmpty()) {
         return false;
     }
 
-    QVariantList sanitizedItems = sanitizeItems(items, nullptr);
+    const QString oldName = m_projects.at(index).name;
+    if (trimmed == oldName) {
+        return false;
+    }
 
-    bool updated = false;
-    for (auto& entry : m_projects) {
-        if (entry.name == trimmed) {
-            entry.data = sanitizedItems;
-            updated = true;
+    QString candidate = trimmed;
+    int suffix = 2;
+    while (true) {
+        const int existingIndex = indexOfProject(candidate);
+        if (existingIndex < 0 || existingIndex == index) {
             break;
         }
+        candidate = QString("%1 %2").arg(trimmed).arg(suffix);
+        suffix += 1;
     }
 
-    if (!updated) {
-        m_projects.push_back({ trimmed, sanitizedItems });
+    m_projects[index].name = candidate;
+    if (oldName == m_currentProjectName) {
+        setCurrentProjectName(candidate);
     }
-
     saveToSettings();
     emit projectsChanged();
     return true;
+}
+
+bool ProjectStore::setCurrentProject(int index)
+{
+    if (index < 0 || index >= m_projects.size()) {
+        return false;
+    }
+    if (setCurrentProjectName(m_projects.at(index).name)) {
+        saveToSettings();
+    }
+    return true;
+}
+
+bool ProjectStore::updateCurrentProject(const QVariantList& items)
+{
+    int index = currentProjectIndex();
+    if (index < 0) {
+        if (m_projects.isEmpty()) {
+            m_projects.push_back({ defaultProjectName(), {} });
+        }
+        setCurrentProjectName(m_projects.front().name);
+        index = currentProjectIndex();
+        if (index < 0) {
+            return false;
+        }
+    }
+
+    m_projects[index].data = sanitizeItems(items, nullptr);
+    saveToSettings();
+    return true;
+}
+
+QVariantList ProjectStore::currentProjectData() const
+{
+    const int index = currentProjectIndex();
+    return projectData(index);
 }
 
 QVariantList ProjectStore::projectData(int index) const
@@ -68,7 +157,22 @@ QVariantList ProjectStore::projectData(int index) const
 void ProjectStore::loadFromSettings()
 {
     QSettings settings;
-    const bool updated = setProjects(parseProjects(settings.value(kProjectsKey)));
+    const QString storedCurrent = settings.value(kCurrentProjectKey).toString();
+    QVector<ProjectEntry> projects = parseProjects(settings.value(kProjectsKey));
+    bool updated = setProjects(projects);
+
+    if (m_projects.isEmpty()) {
+        m_projects.push_back({ defaultProjectName(), {} });
+        updated = true;
+        emit projectsChanged();
+    }
+
+    if (!storedCurrent.isEmpty()) {
+        updated = setCurrentProjectName(storedCurrent) || updated;
+    }
+    if (indexOfProject(m_currentProjectName) < 0) {
+        updated = setCurrentProjectName(m_projects.front().name) || updated;
+    }
     if (updated) {
         saveToSettings();
     }
@@ -87,6 +191,7 @@ void ProjectStore::saveToSettings() const
     QSettings settings;
     settings.setValue(kProjectsKey,
         QString::fromUtf8(QJsonDocument(array).toJson(QJsonDocument::Compact)));
+    settings.setValue(kCurrentProjectKey, m_currentProjectName);
 }
 
 bool ProjectStore::setProjects(QVector<ProjectEntry> projects)
@@ -208,6 +313,16 @@ QVariantList ProjectStore::sanitizeItems(const QVariantList& items, bool* change
         for (auto it = map.cbegin(); it != map.cend(); ++it) {
             cleaned.insert(it.key(), it.value());
         }
+        const QVariant sourceValue = cleaned.value("source");
+        if (sourceValue.isValid() && sourceValue.userType() != QMetaType::QString
+            && sourceValue.canConvert<QUrl>()) {
+            const QUrl url = sourceValue.toUrl();
+            const QString urlString = url.toString();
+            if (!urlString.isEmpty()) {
+                cleaned.insert("source", urlString);
+                updated = true;
+            }
+        }
         QString uid = cleaned.value("uid").toString();
         if (uid.trimmed().isEmpty() || seenIds.contains(uid)) {
             uid = QUuid::createUuid().toString(QUuid::WithoutBraces);
@@ -236,4 +351,50 @@ QVariantList ProjectStore::toVariantList(const QVector<ProjectEntry>& projects)
         list.push_back(map);
     }
     return list;
+}
+
+QString ProjectStore::defaultProjectName()
+{
+    return QStringLiteral("Untitled");
+}
+
+int ProjectStore::indexOfProject(const QString& name) const
+{
+    for (int i = 0; i < m_projects.size(); ++i) {
+        if (m_projects.at(i).name == name) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+QString ProjectStore::makeUniqueName(const QString& base) const
+{
+    QString trimmed = base.trimmed();
+    if (trimmed.isEmpty()) {
+        trimmed = defaultProjectName();
+    }
+    if (indexOfProject(trimmed) < 0) {
+        return trimmed;
+    }
+    int suffix = 2;
+    QString candidate;
+    do {
+        candidate = QString("%1 %2").arg(trimmed).arg(suffix);
+        suffix += 1;
+    } while (indexOfProject(candidate) >= 0);
+    return candidate;
+}
+
+bool ProjectStore::setCurrentProjectName(const QString& name)
+{
+    if (name.isEmpty()) {
+        return false;
+    }
+    if (m_currentProjectName == name) {
+        return false;
+    }
+    m_currentProjectName = name;
+    emit currentProjectChanged();
+    return true;
 }

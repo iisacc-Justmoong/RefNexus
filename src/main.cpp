@@ -3,6 +3,7 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 
+#include "InputState.h"
 #include "ProjectStore.h"
 
 int main(int argc, char* argv[])
@@ -12,9 +13,11 @@ int main(int argc, char* argv[])
     QCoreApplication::setOrganizationDomain("refnexus.app");
     QCoreApplication::setApplicationName("RefNexus");
 
+    InputState inputState;
     ProjectStore projectStore;
     QQmlApplicationEngine engine;
     engine.addImportPath("qrc:/qt/qml");
+    engine.rootContext()->setContextProperty("inputState", &inputState);
     engine.rootContext()->setContextProperty("projectStore", &projectStore);
     engine.loadFromModule("RefNexus", "Main");
 

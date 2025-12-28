@@ -22,6 +22,8 @@ qt_standard_project_setup (REQUIRES 6.5)
 
 qt_add_executable (RefNexus
         MACOSX_BUNDLE
+        src/InputState.cpp
+        src/InputState.h
         src/main.cpp
         src/ProjectStore.cpp
         src/ProjectStore.h
@@ -35,7 +37,25 @@ qt_add_qml_module (RefNexus
         qml/Main.qml
         qml/CanvasItem.qml
         qml/ImageCardContent.qml
-        qml/NoteCardContent.qml
+        RESOURCES
+        resources/icon-add-image.svg
+        resources/icon-pin.svg
+        resources/icon-new-project.svg
+        resources/icon-trash.svg
+        resources/icon-chevron-left.svg
+        resources/icon-chevron-right.svg
+        resources/icon-flip-h.svg
+        resources/icon-flip-v.svg
+        resources/icon-rotate-left.svg
+        resources/icon-rotate-right.svg
+        resources/icon-duplicate.svg
+        resources/icon-forward.svg
+        resources/icon-backward.svg
+        resources/icon-front.svg
+        resources/icon-back.svg
+        resources/icon-close-dark.svg
+        resources/icon-chevron-down-dark.svg
+        resources/icon-chevron-right-dark.svg
 )
 
 target_link_libraries (RefNexus
