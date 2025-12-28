@@ -71,7 +71,7 @@ Item {
             wrapMode: TextEdit.WordWrap
             color: "#e2e8f0"
             Layout.fillWidth: true
-            Layout.preferredHeight: 64
+            Layout.preferredHeight: descriptionField.font.pixelSize + 12
             background: Rectangle {
                 color: "#0f172a"
                 radius: 6
