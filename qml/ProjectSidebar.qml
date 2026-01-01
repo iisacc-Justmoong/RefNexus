@@ -122,8 +122,8 @@ Rectangle {
                 }
             }
             delegate: ProjectListItem {
-                index: index
-                name: name
+                projectIndex: index
+                projectName: name
                 selected: index === root.selectedProjectIndex
                 editing: index === root.editingProjectIndex
                 editingName: root.editingProjectName

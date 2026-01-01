@@ -5,8 +5,8 @@ import QtQuick.Layouts
 Item {
     id: root
 
-    required property int index
-    required property string name
+    required property int projectIndex
+    required property string projectName
     property bool selected: false
     property bool editing: false
     property string editingName: ""
@@ -41,7 +41,7 @@ Item {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                text: root.name
+                text: root.projectName
                 color: "#d7dbe0"
                 elide: Text.ElideRight
                 visible: !root.editing
@@ -91,17 +91,17 @@ Item {
                     if (ListView.view) {
                         ListView.view.forceActiveFocus()
                     }
-                    root.selectRequested(root.index)
+                    root.selectRequested(root.projectIndex)
                 }
                 onDoubleClicked: {
                     if (ListView.view) {
                         ListView.view.forceActiveFocus()
                     }
-                    root.renameRequested(root.index)
+                    root.renameRequested(root.projectIndex)
                 }
             }
 
-            ToolTip.text: "Load project: " + root.name
+            ToolTip.text: "Load project: " + root.projectName
             ToolTip.delay: 1000
             ToolTip.visible: projectSelectArea.containsMouse
         }
@@ -112,7 +112,7 @@ Item {
             icon.source: "qrc:/qt/qml/RefNexus/resources/icon-trash.svg"
             icon.width: 16
             icon.height: 16
-            onClicked: root.deleteRequested(root.index)
+            onClicked: root.deleteRequested(root.projectIndex)
             ToolTip.text: "Delete project"
             ToolTip.delay: 1000
             ToolTip.visible: hovered
