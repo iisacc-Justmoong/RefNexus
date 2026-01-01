@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Dialogs
 
 ApplicationWindow {
     id: root
@@ -35,10 +34,6 @@ ApplicationWindow {
     property int activeCardInteractions: 0
     property int selectedProjectIndex: -1
     property bool spacePanning: inputState ? inputState.spacePressed : false
-    property real panStartX: 0
-    property real panStartY: 0
-    property real panStartContentX: 0
-    property real panStartContentY: 0
     property bool projectRestoring: false
     property int editingProjectIndex: -1
     property string editingProjectName: ""
@@ -95,17 +90,6 @@ ApplicationWindow {
         var centerX = (canvasView.contentX + canvasView.width / 2) / root.canvasScale
         var centerY = (canvasView.contentY + canvasView.height / 2) / root.canvasScale
         return { x: centerX, y: centerY }
-    }
-
-    function clampValue(value, minValue, maxValue) {
-        return Math.max(minValue, Math.min(maxValue, value))
-    }
-
-    function applyContentPosition(x, y) {
-        var maxX = Math.max(0, canvasView.contentWidth - canvasView.width)
-        var maxY = Math.max(0, canvasView.contentHeight - canvasView.height)
-        canvasView.contentX = clampValue(x, 0, maxX)
-        canvasView.contentY = clampValue(y, 0, maxY)
     }
 
     function snapValue(value) {
@@ -674,7 +658,7 @@ ApplicationWindow {
         }
         refreshProjects()
         loadCurrentProject()
-        gridOverlay.requestPaint()
+        canvasView.requestGridPaint()
     }
 
     Connections {
@@ -682,14 +666,9 @@ ApplicationWindow {
         function onProjectsChanged() {
             refreshProjects()
             loadCurrentProject()
-            if (gridOverlay) {
-                gridOverlay.requestPaint()
-            }
+            canvasView.requestGridPaint()
         }
     }
-
-    onGridEnabledChanged: gridOverlay.requestPaint()
-    onGridSizeChanged: gridOverlay.requestPaint()
 
     function beginCardInteraction() {
         activeCardInteractions += 1
@@ -750,59 +729,18 @@ ApplicationWindow {
 
     onAlwaysOnTopChanged: updateWindowFlags()
 
-    header: ToolBar {
-        background: Rectangle {
-            color: "#0f1115"
-            border.color: "#1b1f26"
-        }
-
-        RowLayout {
-            anchors.fill: parent
-            spacing: 10
-
-            ToolButton {
-                display: AbstractButton.IconOnly
-                icon.source: "qrc:/qt/qml/RefNexus/resources/icon-add-image.svg"
-                icon.width: 18
-                icon.height: 18
-                onClicked: imageDialog.open()
-                hoverEnabled: true
-                ToolTip.text: "Add images to the canvas"
-                ToolTip.delay: 1000
-                ToolTip.visible: hovered
-                Layout.leftMargin: 12
-            }
-
-            Item {
-                Layout.fillWidth: true
-            }
-
-            ToolButton {
-                display: AbstractButton.IconOnly
-                icon.source: "qrc:/qt/qml/RefNexus/resources/icon-pin.svg"
-                icon.width: 18
-                icon.height: 18
-                checkable: true
-                checked: root.alwaysOnTop
-                onToggled: root.alwaysOnTop = checked
-                hoverEnabled: true
-                ToolTip.text: "Toggle always on top"
-                ToolTip.delay: 1000
-                ToolTip.visible: hovered
-            }
-
-        }
+    header: MainToolBar {
+        alwaysOnTop: root.alwaysOnTop
+        onAddImageRequested: imageDialog.open()
+        onAlwaysOnTopToggled: root.alwaysOnTop = enabled
     }
 
-    FileDialog {
+    ImageImportDialog {
         id: imageDialog
-        title: "Add Images"
-        fileMode: FileDialog.OpenFiles
-        nameFilters: ["Images (*.png *.jpg *.jpeg *.webp *.bmp *.gif *.tif *.tiff)"]
-        onAccepted: {
+        onImagesSelected: {
             var center = root.centerPosition()
-            for (var i = 0; i < selectedFiles.length; i += 1) {
-                root.addImage(selectedFiles[i], center.x + i * 24, center.y + i * 24)
+            for (var i = 0; i < urls.length; i += 1) {
+                root.addImage(urls[i], center.x + i * 24, center.y + i * 24)
             }
         }
     }
@@ -811,420 +749,71 @@ ApplicationWindow {
         anchors.fill: parent
         spacing: 0
 
-        Rectangle {
+        ProjectSidebar {
             id: sidebar
             Layout.preferredWidth: root.leftSidebarCollapsed ? 40 : 260
             Layout.minimumWidth: root.leftSidebarCollapsed ? 40 : 260
             Layout.maximumWidth: root.leftSidebarCollapsed ? 40 : 260
             Layout.fillHeight: true
-            color: "#0f1115"
-            border.color: "#1b1f26"
-
-            Item {
-                id: leftSidebarHeader
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.top: parent.top
-                height: 44
-
-                RowLayout {
-                    anchors.fill: parent
-                    anchors.margins: 12
-                    spacing: 8
-                    visible: !root.leftSidebarCollapsed
-
-                    Label {
-                        text: "Projects"
-                        color: "#d7dbe0"
-                        font.pixelSize: 16
-                        Layout.fillWidth: true
-                    }
-
-                    ToolButton {
-                        display: AbstractButton.IconOnly
-                        icon.source: "qrc:/qt/qml/RefNexus/resources/icon-chevron-left.svg"
-                        icon.width: 16
-                        icon.height: 16
-                        hoverEnabled: true
-                        ToolTip.text: "Collapse sidebar"
-                        ToolTip.delay: 1000
-                        ToolTip.visible: hovered
-                        onClicked: root.leftSidebarCollapsed = true
-                    }
-                }
-
-                ToolButton {
-                    display: AbstractButton.IconOnly
-                    icon.source: "qrc:/qt/qml/RefNexus/resources/icon-chevron-right.svg"
-                    icon.width: 16
-                    icon.height: 16
-                    hoverEnabled: true
-                    ToolTip.text: "Expand sidebar"
-                    ToolTip.delay: 1000
-                    ToolTip.visible: hovered
-                    anchors.centerIn: parent
-                    visible: root.leftSidebarCollapsed
-                    onClicked: root.leftSidebarCollapsed = false
-                }
-            }
-
-            ColumnLayout {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.top: leftSidebarHeader.bottom
-                anchors.bottom: parent.bottom
-                anchors.leftMargin: 16
-                anchors.rightMargin: 16
-                anchors.topMargin: 8
-                anchors.bottomMargin: 16
-                spacing: 12
-                visible: !root.leftSidebarCollapsed
-
-                Button {
-                    display: AbstractButton.IconOnly
-                    icon.source: "qrc:/qt/qml/RefNexus/resources/icon-new-project.svg"
-                    icon.width: 18
-                    icon.height: 18
-                    Layout.fillWidth: true
-                    hoverEnabled: true
-                    ToolTip.text: "Create a new Untitled project"
-                    ToolTip.delay: 1000
-                    ToolTip.visible: hovered
-                    onClicked: createProject("Untitled")
-                }
-
-                Label {
-                    text: "Saved Sessions"
-                    color: "#8b9098"
-                    font.pixelSize: 12
-                }
-
-                ListView {
-                    id: projectList
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    clip: true
-                    model: projectModel
-                    focus: true
-                    Keys.onPressed: {
-                        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-                            if (root.editingProjectIndex >= 0) {
-                                root.commitRenameProject()
-                            } else if (root.selectedProjectIndex >= 0) {
-                                root.beginRenameProject(root.selectedProjectIndex)
-                            }
-                            event.accepted = true
-                        } else if (event.key === Qt.Key_Escape) {
-                            root.cancelRenameProject()
-                            event.accepted = true
-                        }
-                    }
-                    delegate: Item {
-                        id: projectRow
-                        width: ListView.view.width
-                        height: 34
-                        property bool editing: index === root.editingProjectIndex
-
-                        Rectangle {
-                            anchors.fill: parent
-                            radius: 6
-                            color: index === root.selectedProjectIndex
-                                ? "#1b1f26"
-                                : "transparent"
-                        }
-
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.margins: 6
-                            spacing: 8
-
-                            Item {
-                                id: projectHitArea
-                                Layout.fillWidth: true
-                                Layout.fillHeight: true
-
-                                Label {
-                                    anchors.left: parent.left
-                                    anchors.right: parent.right
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: name
-                                    color: "#d7dbe0"
-                                    elide: Text.ElideRight
-                                    visible: !projectRow.editing
-                                }
-
-                                TextField {
-                                    id: projectNameEditor
-                                    anchors.left: parent.left
-                                    anchors.right: parent.right
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: projectRow.editing ? root.editingProjectName : ""
-                                    visible: projectRow.editing
-                                    selectByMouse: true
-                                    onVisibleChanged: {
-                                        if (visible) {
-                                            forceActiveFocus()
-                                            selectAll()
-                                        }
-                                    }
-                                    onTextChanged: {
-                                        if (activeFocus) {
-                                            root.editingProjectName = text
-                                        }
-                                    }
-                                    Keys.onPressed: {
-                                        if (event.key === Qt.Key_Return
-                                            || event.key === Qt.Key_Enter) {
-                                            root.commitRenameProject()
-                                            event.accepted = true
-                                        } else if (event.key === Qt.Key_Escape) {
-                                            root.cancelRenameProject()
-                                            event.accepted = true
-                                        }
-                                    }
-                                    onEditingFinished: {
-                                        if (projectRow.editing) {
-                                            root.commitRenameProject()
-                                        }
-                                    }
-                                }
-
-                                MouseArea {
-                                    id: projectSelectArea
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    enabled: !projectRow.editing
-                                    onClicked: {
-                                        projectList.forceActiveFocus()
-                                        root.loadProject(index)
-                                    }
-                                    onDoubleClicked: {
-                                        projectList.forceActiveFocus()
-                                        root.beginRenameProject(index)
-                                    }
-                                }
-
-                                ToolTip.text: "Load project: " + name
-                                ToolTip.delay: 1000
-                                ToolTip.visible: projectSelectArea.containsMouse
-                            }
-
-                            ToolButton {
-                                hoverEnabled: true
-                                display: AbstractButton.IconOnly
-                                icon.source: "qrc:/qt/qml/RefNexus/resources/icon-trash.svg"
-                                icon.width: 16
-                                icon.height: 16
-                                onClicked: root.deleteProject(index)
-                                ToolTip.text: "Delete project"
-                                ToolTip.delay: 1000
-                                ToolTip.visible: hovered
-                            }
-                        }
-                    }
-                    ScrollBar.vertical: ScrollBar { }
-
-                    Text {
-                        anchors.centerIn: parent
-                        visible: projectModel.count === 0
-                        text: "No saved projects yet"
-                        color: "#8b9098"
-                        font.pixelSize: 12
-                    }
-                }
+            collapsed: root.leftSidebarCollapsed
+            projectModel: projectModel
+            selectedProjectIndex: root.selectedProjectIndex
+            editingProjectIndex: root.editingProjectIndex
+            editingProjectName: root.editingProjectName
+            onCollapseRequested: root.leftSidebarCollapsed = collapsedState
+            onCreateProjectRequested: root.createProject(name)
+            onProjectSelected: root.loadProject(index)
+            onDeleteProjectRequested: root.deleteProject(index)
+            onRenameProjectRequested: root.beginRenameProject(index)
+            onRenameCommitted: root.commitRenameProject()
+            onRenameCanceled: root.cancelRenameProject()
+            onEditingProjectNameUpdated: function(updatedName) {
+                root.editingProjectName = updatedName
             }
         }
 
-        Flickable {
+        CanvasView {
             id: canvasView
             Layout.fillWidth: true
             Layout.fillHeight: true
-            contentWidth: canvasRoot.width * root.canvasScale
-            contentHeight: canvasRoot.height * root.canvasScale
-            interactive: false
-            clip: true
-            ScrollBar.vertical: ScrollBar {
-                policy: ScrollBar.AlwaysOff
-            }
-            ScrollBar.horizontal: ScrollBar {
-                policy: ScrollBar.AlwaysOff
-            }
-
-            WheelHandler {
-                target: null
-                onWheel: {
-                    var angle = wheel.angleDelta.y
-                    if (angle === 0) {
-                        return
-                    }
-                    var oldScale = root.canvasScale
-                    var factor = angle > 0 ? 1.1 : 0.9
-                    var newScale = root.clampValue(oldScale * factor,
-                        root.minCanvasScale, root.maxCanvasScale)
-                    if (newScale === oldScale) {
-                        return
-                    }
-                    var focusX = (canvasView.contentX + wheel.x) / oldScale
-                    var focusY = (canvasView.contentY + wheel.y) / oldScale
-                    root.canvasScale = newScale
-                    root.applyContentPosition(focusX * newScale - wheel.x,
-                        focusY * newScale - wheel.y)
-                    wheel.accepted = true
+            canvasWidth: root.canvasWidth
+            canvasHeight: root.canvasHeight
+            canvasScale: root.canvasScale
+            minCanvasScale: root.minCanvasScale
+            maxCanvasScale: root.maxCanvasScale
+            gridEnabled: root.gridEnabled
+            gridSize: root.gridSize
+            spacePanning: root.spacePanning
+            selectedId: root.selectedId
+            canvasModel: canvasModel
+            onScaleRequested: root.canvasScale = scale
+            onImagesDropped: {
+                for (var i = 0; i < urls.length; i += 1) {
+                    root.addImage(urls[i], dropX + i * 24, dropY + i * 24)
                 }
             }
-
-            Item {
-                id: canvasRoot
-                width: root.canvasWidth
-                height: root.canvasHeight
-                transformOrigin: Item.TopLeft
-                scale: root.canvasScale
-
-                Rectangle {
-                    anchors.fill: parent
-                    color: "#0d1014"
-                }
-
-                Canvas {
-                    id: gridOverlay
-                    anchors.fill: parent
-                    visible: root.gridEnabled
-                    opacity: 0.4
-
-                    onPaint: {
-                        var ctx = getContext("2d")
-                        ctx.clearRect(0, 0, width, height)
-                        ctx.strokeStyle = "#1b1f26"
-                        ctx.lineWidth = 1
-                        var step = root.gridSize
-                        if (step <= 0) {
-                            return
-                        }
-                        for (var x = 0; x <= width; x += step) {
-                            ctx.beginPath()
-                            ctx.moveTo(x, 0)
-                            ctx.lineTo(x, height)
-                            ctx.stroke()
-                        }
-                        for (var y = 0; y <= height; y += step) {
-                            ctx.beginPath()
-                            ctx.moveTo(0, y)
-                            ctx.lineTo(width, y)
-                            ctx.stroke()
-                        }
-                    }
-
-                    onWidthChanged: requestPaint()
-                    onHeightChanged: requestPaint()
-                }
-
-                DropArea {
-                    anchors.fill: parent
-                    onDropped: {
-                        if (!drop.hasUrls) {
-                            return
-                        }
-                        var baseX = drop.x
-                        var baseY = drop.y
-                        for (var i = 0; i < drop.urls.length; i += 1) {
-                            root.addImage(drop.urls[i], baseX + i * 24, baseY + i * 24)
-                        }
-                    }
-                }
-
-                TapHandler {
-                    onTapped: root.selectedId = ""
-                }
-
-                Repeater {
-                    model: canvasModel
-                    delegate: CanvasItem {
-                        x: xPos
-                        y: yPos
-                        width: itemWidth
-                        height: itemHeight
-                        scale: itemScale
-                        imageRotation: itemRotation
-                        flipHorizontal: flipX
-                        flipVertical: flipY
-                        collapsedState: collapsed
-                        canvasPanning: root.spacePanning
-                        imageSource: source
-                        titleText: title
-                        descriptionText: description
-                        autoSize: autoSize
-                        selected: uid === root.selectedId
-                        onActivated: root.selectItem(uid)
-                        onCloseRequested: root.removeItemById(uid)
-                        onCollapseRequested: function(collapsedState) {
-                            root.toggleCollapse(uid, collapsedState)
-                        }
-                        onLayoutMetricsReady: function(extraWidth, extraHeight) {
-                            root.applyLayoutMetrics(index, extraWidth, extraHeight)
-                        }
-                        onDisplaySizeReady: function(width, height) {
-                            root.updateCanvasItem(index, {
-                                displayWidth: width,
-                                displayHeight: height
-                            })
-                        }
-                        onTitleEdited: function(text) {
-                            root.updateCanvasItem(index, { title: text })
-                        }
-                        onDescriptionEdited: function(text) {
-                            root.updateCanvasItem(index, { description: text })
-                        }
-                        onPositionRequested: function(x, y) {
-                            root.updateCanvasItem(index, { xPos: x, yPos: y })
-                        }
-                        onResizeRequested: function(width, height) {
-                            root.updateCanvasItem(index, {
-                                itemWidth: width,
-                                itemHeight: height
-                            })
-                        }
-                        onAutoSizeApplied: root.updateCanvasItem(index, { autoSize: false })
-                        onDragStarted: {
-                            root.selectItem(uid)
-                            root.beginCardInteraction()
-                        }
-                        onDragFinished: root.endCardInteraction()
-                    }
-                }
-
-                Text {
-                    visible: canvasModel.count === 0
-                    text: "Drop images here to start your board"
-                    color: "#8b9098"
-                    font.pixelSize: 16
-                    anchors.centerIn: parent
-                }
+            onClearSelectionRequested: root.selectedId = ""
+            onItemActivated: root.selectItem(uid)
+            onCloseRequested: root.removeItemById(uid)
+            onCollapseRequested: root.toggleCollapse(uid, collapsedState)
+            onLayoutMetricsReady: root.applyLayoutMetrics(index, extraWidth, extraHeight)
+            onDisplaySizeReady: root.updateCanvasItem(index, {
+                displayWidth: displayWidth,
+                displayHeight: displayHeight
+            })
+            onTitleEdited: root.updateCanvasItem(index, { title: text })
+            onDescriptionEdited: root.updateCanvasItem(index, { description: text })
+            onPositionRequested: root.updateCanvasItem(index, { xPos: posX, yPos: posY })
+            onResizeRequested: root.updateCanvasItem(index, {
+                itemWidth: itemWidth,
+                itemHeight: itemHeight
+            })
+            onAutoSizeApplied: root.updateCanvasItem(index, { autoSize: false })
+            onDragStarted: {
+                root.selectItem(uid)
+                root.beginCardInteraction()
             }
-
-            MouseArea {
-                id: panOverlay
-                parent: canvasView
-                anchors.fill: parent
-                enabled: root.spacePanning
-                cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
-                preventStealing: true
-                acceptedButtons: Qt.LeftButton
-                onPressed: {
-                    root.panStartX = mouse.x
-                    root.panStartY = mouse.y
-                    root.panStartContentX = canvasView.contentX
-                    root.panStartContentY = canvasView.contentY
-                }
-                onPositionChanged: {
-                    if (!pressed) {
-                        return
-                    }
-                    var deltaX = mouse.x - root.panStartX
-                    var deltaY = mouse.y - root.panStartY
-                    root.applyContentPosition(root.panStartContentX - deltaX,
-                        root.panStartContentY - deltaY)
-                }
-            }
+            onDragFinished: root.endCardInteraction()
         }
 
         ToolPanel {

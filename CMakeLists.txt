@@ -42,6 +42,11 @@ qt_add_qml_module (RefNexus
         NO_CACHEGEN
         QML_FILES
         qml/Main.qml
+        qml/MainToolBar.qml
+        qml/ImageImportDialog.qml
+        qml/ProjectSidebar.qml
+        qml/ProjectListItem.qml
+        qml/CanvasView.qml
         qml/CanvasItem.qml
         qml/ImageCardContent.qml
         qml/ToolPanel.qml
