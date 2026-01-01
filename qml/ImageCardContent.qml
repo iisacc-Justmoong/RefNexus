@@ -15,6 +15,12 @@ Item {
     property int layoutSpacing: 6
     property real minimumWidth: 1
     property real minimumHeight: 1
+    property color surfaceColor: "#121826"
+    property color surfaceActive: "#1b2534"
+    property color borderColor: "#243145"
+    property color accentColor: "#5c7cfa"
+    property color textPrimary: "#e6edf5"
+    property color textSecondary: "#9aa6b2"
     signal titleEdited(string text)
     signal descriptionEdited(string text)
     signal sizeHintReady(real width, real height)
@@ -33,6 +39,19 @@ Item {
             placeholderText: "Title"
             Layout.fillWidth: true
             text: root.titleText
+            color: root.textPrimary
+            placeholderTextColor: root.textSecondary
+            font.pixelSize: 13
+            leftPadding: 10
+            rightPadding: 10
+            topPadding: 8
+            bottomPadding: 8
+            implicitHeight: 34
+            background: Rectangle {
+                radius: 8
+                color: titleField.activeFocus ? root.surfaceActive : root.surfaceColor
+                border.color: titleField.activeFocus ? root.accentColor : root.borderColor
+            }
             onTextChanged: {
                 if (activeFocus) {
                     root.titleEdited(text)
@@ -63,6 +82,7 @@ Item {
             visible: source !== ""
             rotation: root.rotationDegrees
             transformOrigin: Item.Center
+            mipmap: true
             transform: Scale {
                 origin.x: imagePreview.width / 2
                 origin.y: imagePreview.height / 2
@@ -96,13 +116,24 @@ Item {
             placeholderText: "Description"
             text: root.descriptionText
             wrapMode: TextEdit.WordWrap
-            color: "#d7dbe0"
+            color: root.textPrimary
+            placeholderTextColor: root.textSecondary
+            font.pixelSize: 12
+            leftPadding: 10
+            rightPadding: 10
+            topPadding: 8
+            bottomPadding: 8
             Layout.fillWidth: true
             Layout.preferredHeight: Math.max(descriptionField.contentHeight + 12,
                 descriptionField.font.pixelSize + 12)
             background: Rectangle {
-                color: "#0f1115"
-                radius: 6
+                color: descriptionField.activeFocus
+                    ? root.surfaceActive
+                    : root.surfaceColor
+                radius: 8
+                border.color: descriptionField.activeFocus
+                    ? root.accentColor
+                    : root.borderColor
             }
             onTextChanged: {
                 if (activeFocus) {

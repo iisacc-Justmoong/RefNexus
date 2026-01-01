@@ -99,7 +99,10 @@ Flickable {
 
         Rectangle {
             anchors.fill: parent
-            color: "#0d1014"
+            gradient: Gradient {
+                GradientStop { position: 0.0; color: "#0d131b" }
+                GradientStop { position: 1.0; color: "#0a0f15" }
+            }
         }
 
         Canvas {
@@ -111,7 +114,7 @@ Flickable {
             onPaint: {
                 var ctx = getContext("2d")
                 ctx.clearRect(0, 0, width, height)
-                ctx.strokeStyle = "#1b1f26"
+                ctx.strokeStyle = "rgba(48, 61, 79, 0.45)"
                 ctx.lineWidth = 1
                 var step = root.gridSize
                 if (step <= 0) {
@@ -182,12 +185,24 @@ Flickable {
             }
         }
 
-        Text {
+        Rectangle {
+            id: emptyState
             visible: root.canvasModel && root.canvasModel.count === 0
-            text: "Drop images here to start your board"
-            color: "#8b9098"
-            font.pixelSize: 16
             anchors.centerIn: parent
+            radius: 16
+            color: "#121826"
+            border.color: "#243145"
+            width: emptyStateLabel.implicitWidth + 36
+            height: emptyStateLabel.implicitHeight + 20
+
+            Text {
+                id: emptyStateLabel
+                anchors.centerIn: parent
+                text: "Drop images here to start your board"
+                color: "#9aa6b2"
+                font.pixelSize: 14
+                font.weight: Font.Medium
+            }
         }
     }
 

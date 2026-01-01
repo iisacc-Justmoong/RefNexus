@@ -4,8 +4,12 @@ import QtQuick.Layouts
 
 Rectangle {
     id: root
-    color: "#0f1115"
-    border.color: "#1b1f26"
+    color: "#0f141d"
+    border.color: "#243145"
+    gradient: Gradient {
+        GradientStop { position: 0.0; color: "#131a26" }
+        GradientStop { position: 1.0; color: "#0f141d" }
+    }
 
     property bool collapsed: false
     property var projectModel
@@ -37,12 +41,13 @@ Rectangle {
 
             Label {
                 text: "Projects"
-                color: "#d7dbe0"
+                color: "#e6edf5"
                 font.pixelSize: 16
                 Layout.fillWidth: true
             }
 
             ToolButton {
+                id: collapseButton
                 display: AbstractButton.IconOnly
                 icon.source: "qrc:/qt/qml/RefNexus/resources/icon-chevron-left.svg"
                 icon.width: 16
@@ -52,10 +57,20 @@ Rectangle {
                 ToolTip.delay: 1000
                 ToolTip.visible: hovered
                 onClicked: root.collapseRequested(true)
+                implicitWidth: 30
+                implicitHeight: 30
+                background: Rectangle {
+                    radius: 8
+                    color: collapseButton.down
+                        ? "#2a3a54"
+                        : (collapseButton.hovered ? "#1f2a3a" : "#121826")
+                    border.color: "#243145"
+                }
             }
         }
 
         ToolButton {
+            id: expandButton
             display: AbstractButton.IconOnly
             icon.source: "qrc:/qt/qml/RefNexus/resources/icon-chevron-right.svg"
             icon.width: 16
@@ -67,6 +82,15 @@ Rectangle {
             anchors.centerIn: parent
             visible: root.collapsed
             onClicked: root.collapseRequested(false)
+            implicitWidth: 30
+            implicitHeight: 30
+            background: Rectangle {
+                radius: 8
+                color: expandButton.down
+                    ? "#2a3a54"
+                    : (expandButton.hovered ? "#1f2a3a" : "#121826")
+                border.color: "#243145"
+            }
         }
     }
 
@@ -83,21 +107,47 @@ Rectangle {
         visible: !root.collapsed
 
         Button {
-            display: AbstractButton.IconOnly
+            id: newProjectButton
+            display: AbstractButton.TextBesideIcon
             icon.source: "qrc:/qt/qml/RefNexus/resources/icon-new-project.svg"
             icon.width: 18
             icon.height: 18
+            text: "New Project"
             Layout.fillWidth: true
             hoverEnabled: true
             ToolTip.text: "Create a new Untitled project"
             ToolTip.delay: 1000
             ToolTip.visible: hovered
             onClicked: root.createProjectRequested("Untitled")
+            implicitHeight: 36
+            background: Rectangle {
+                radius: 10
+                color: newProjectButton.down
+                    ? "#2a3a54"
+                    : (newProjectButton.hovered ? "#1f2a3a" : "#121826")
+                border.color: "#243145"
+            }
+            contentItem: RowLayout {
+                spacing: 8
+                anchors.centerIn: parent
+                Image {
+                    source: newProjectButton.icon.source
+                    width: 16
+                    height: 16
+                    fillMode: Image.PreserveAspectFit
+                }
+                Label {
+                    text: newProjectButton.text
+                    color: "#e6edf5"
+                    font.pixelSize: 12
+                    font.weight: Font.Medium
+                }
+            }
         }
 
         Label {
             text: "Saved Sessions"
-            color: "#8b9098"
+            color: "#9aa6b2"
             font.pixelSize: 12
         }
 
@@ -136,13 +186,23 @@ Rectangle {
                 onRenameCommitted: root.renameCommitted()
                 onRenameCanceled: root.renameCanceled()
             }
-            ScrollBar.vertical: ScrollBar { }
+            ScrollBar.vertical: ScrollBar {
+                policy: ScrollBar.AsNeeded
+                contentItem: Rectangle {
+                    radius: 4
+                    color: "#2a364a"
+                }
+                background: Rectangle {
+                    radius: 4
+                    color: "#101621"
+                }
+            }
 
             Text {
                 anchors.centerIn: parent
                 visible: root.projectModel ? root.projectModel.count === 0 : true
                 text: "No saved projects yet"
-                color: "#8b9098"
+                color: "#9aa6b2"
                 font.pixelSize: 12
             }
         }

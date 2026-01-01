@@ -6,13 +6,19 @@ ToolBar {
     id: root
 
     property bool alwaysOnTop: false
+    property color surfaceColor: "#121826"
+    property color borderColor: "#243145"
+    property color accentColor: "#5c7cfa"
 
     signal addImageRequested()
     signal alwaysOnTopToggled(bool enabled)
 
     background: Rectangle {
-        color: "#0f1115"
-        border.color: "#1b1f26"
+        gradient: Gradient {
+            GradientStop { position: 0.0; color: "#141b28" }
+            GradientStop { position: 1.0; color: "#0f141d" }
+        }
+        border.color: root.borderColor
     }
 
     RowLayout {
@@ -20,6 +26,7 @@ ToolBar {
         spacing: 10
 
         ToolButton {
+            id: addButton
             display: AbstractButton.IconOnly
             icon.source: "qrc:/qt/qml/RefNexus/resources/icon-add-image.svg"
             icon.width: 18
@@ -30,6 +37,15 @@ ToolBar {
             ToolTip.delay: 1000
             ToolTip.visible: hovered
             Layout.leftMargin: 12
+            implicitWidth: 36
+            implicitHeight: 36
+            background: Rectangle {
+                radius: 10
+                color: addButton.down
+                    ? "#2a3a54"
+                    : (addButton.hovered ? "#1f2a3a" : root.surfaceColor)
+                border.color: root.borderColor
+            }
         }
 
         Item {
@@ -37,6 +53,7 @@ ToolBar {
         }
 
         ToolButton {
+            id: pinButton
             display: AbstractButton.IconOnly
             icon.source: "qrc:/qt/qml/RefNexus/resources/icon-pin.svg"
             icon.width: 18
@@ -48,6 +65,17 @@ ToolBar {
             ToolTip.text: "Toggle always on top"
             ToolTip.delay: 1000
             ToolTip.visible: hovered
+            implicitWidth: 36
+            implicitHeight: 36
+            background: Rectangle {
+                radius: 10
+                color: pinButton.checked
+                    ? "#23314a"
+                    : (pinButton.down
+                        ? "#2a3a54"
+                        : (pinButton.hovered ? "#1f2a3a" : root.surfaceColor))
+                border.color: pinButton.checked ? root.accentColor : root.borderColor
+            }
         }
     }
 }

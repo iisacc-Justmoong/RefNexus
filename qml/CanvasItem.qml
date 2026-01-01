@@ -19,6 +19,14 @@ Item {
     property bool canvasPanning: false
     property real minimumWidth: 1
     property real minimumHeight: 1
+    property color surfaceColor: "#121826"
+    property color surfaceElevated: "#151d2b"
+    property color surfaceHover: "#1b2534"
+    property color borderColor: "#243145"
+    property color borderActive: "#5c7cfa"
+    property color textPrimary: "#e6edf5"
+    property color textSecondary: "#9aa6b2"
+    property color gripColor: "#2f3c4f"
     signal activated()
     signal titleEdited(string text)
     signal descriptionEdited(string text)
@@ -157,9 +165,15 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        radius: 12
-        color: "#0f1115"
-        border.color: root.selected ? "#8b9098" : "#1b1f26"
+        radius: 14
+        gradient: Gradient {
+            GradientStop {
+                position: 0.0
+                color: root.selected ? "#16223a" : "#131a26"
+            }
+            GradientStop { position: 1.0; color: "#0f141d" }
+        }
+        border.color: root.selected ? root.borderActive : root.borderColor
         border.width: root.selected ? 2 : 1
     }
 
@@ -214,9 +228,12 @@ Item {
         anchors.right: parent.right
         anchors.top: parent.top
         height: root.dragBarHeight
-        radius: 10
-        color: "#0f1115"
-        border.color: root.selected ? "#8b9098" : "#1b1f26"
+        radius: 12
+        gradient: Gradient {
+            GradientStop { position: 0.0; color: root.surfaceElevated }
+            GradientStop { position: 1.0; color: "#111824" }
+        }
+        border.color: root.selected ? root.borderActive : root.borderColor
         border.width: 1
         z: 6
 
@@ -234,17 +251,19 @@ Item {
                 icon.width: 10
                 icon.height: 10
                 hoverEnabled: true
-                implicitWidth: 14
-                implicitHeight: 14
+                implicitWidth: 18
+                implicitHeight: 18
                 onClicked: root.closeRequested()
                 ToolTip.text: "Close card"
                 ToolTip.delay: 1000
                 ToolTip.visible: hovered
 
                 background: Rectangle {
-                    radius: 7
-                    color: "#2b2f36"
-                    border.color: "#0b0d10"
+                    radius: 8
+                    color: closeButton.down
+                        ? "#2a3a54"
+                        : (closeButton.hovered ? "#1f2a3a" : "#18202d")
+                    border.color: "#1d2836"
                 }
             }
 
@@ -257,17 +276,19 @@ Item {
                 icon.width: 10
                 icon.height: 10
                 hoverEnabled: true
-                implicitWidth: 14
-                implicitHeight: 14
+                implicitWidth: 18
+                implicitHeight: 18
                 onClicked: root.collapseRequested(!root.collapsedState)
                 ToolTip.text: root.collapsedState ? "Expand card" : "Collapse card"
                 ToolTip.delay: 1000
                 ToolTip.visible: hovered
 
                 background: Rectangle {
-                    radius: 7
-                    color: "#3b414a"
-                    border.color: "#0b0d10"
+                    radius: 8
+                    color: collapseButton.down
+                        ? "#2a3a54"
+                        : (collapseButton.hovered ? "#1f2a3a" : "#1a2232")
+                    border.color: "#1d2836"
                 }
             }
         }
@@ -277,8 +298,8 @@ Item {
             width: 36
             height: 4
             radius: 2
-            color: "#2a2e36"
-            opacity: 0.6
+            color: root.gripColor
+            opacity: 0.7
             z: 1
         }
 
@@ -291,8 +312,9 @@ Item {
             text: root.titleText.trim().length > 0
                 ? root.titleText
                 : "Image"
-            color: "#d7dbe0"
+            color: root.textPrimary
             font.pixelSize: 12
+            font.weight: Font.Medium
             elide: Text.ElideRight
             visible: root.collapsedState
             z: 1
@@ -328,9 +350,9 @@ Item {
         id: resizeHandle
         width: 14
         height: 14
-        radius: 3
-        color: "#8b9098"
-        border.color: "#0b0d10"
+        radius: 4
+        color: root.selected ? root.borderActive : "#3a475c"
+        border.color: "#0b0f14"
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         anchors.margins: 6

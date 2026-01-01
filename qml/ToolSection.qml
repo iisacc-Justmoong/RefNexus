@@ -11,13 +11,21 @@ ColumnLayout {
 
     Label {
         text: root.title
-        color: "#8b9098"
+        color: "#9aa6b2"
         font.pixelSize: 12
     }
 
-    ColumnLayout {
-        id: contentLayout
-        spacing: 10
+    Rectangle {
+        radius: 10
+        color: "#111826"
+        border.color: "#243145"
         Layout.fillWidth: true
+
+        ColumnLayout {
+            id: contentLayout
+            spacing: 10
+            anchors.fill: parent
+            anchors.margins: 10
+        }
     }
 }

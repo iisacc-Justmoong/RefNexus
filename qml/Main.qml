@@ -7,7 +7,13 @@ ApplicationWindow {
     width: 1280
     height: 800
     visible: true
-    color: "#0b0d10"
+    color: "#0b0f14"
+    background: Rectangle {
+        gradient: Gradient {
+            GradientStop { position: 0.0; color: "#0c1118" }
+            GradientStop { position: 1.0; color: "#090d12" }
+        }
+    }
 
     onClosing: {
         syncCurrentProject()

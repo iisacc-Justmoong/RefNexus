@@ -10,6 +10,12 @@ Item {
     property bool selected: false
     property bool editing: false
     property string editingName: ""
+    property color surfaceColor: "#121826"
+    property color surfaceHover: "#1a2332"
+    property color borderColor: "#243145"
+    property color accentColor: "#5c7cfa"
+    property color textPrimary: "#e6edf5"
+    property color textSecondary: "#9aa6b2"
 
     signal selectRequested(int index)
     signal renameRequested(int index)
@@ -23,8 +29,11 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        radius: 6
-        color: root.selected ? "#1b1f26" : "transparent"
+        radius: 8
+        color: root.selected
+            ? "#1b2534"
+            : (projectSelectArea.containsMouse ? root.surfaceHover : "transparent")
+        border.color: root.selected ? root.accentColor : "transparent"
     }
 
     RowLayout {
@@ -42,7 +51,8 @@ Item {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 text: root.projectName
-                color: "#d7dbe0"
+                color: root.textPrimary
+                font.pixelSize: 12
                 elide: Text.ElideRight
                 visible: !root.editing
             }
@@ -55,6 +65,22 @@ Item {
                 text: root.editing ? root.editingName : ""
                 visible: root.editing
                 selectByMouse: true
+                color: root.textPrimary
+                placeholderTextColor: root.textSecondary
+                font.pixelSize: 12
+                leftPadding: 8
+                rightPadding: 8
+                topPadding: 6
+                bottomPadding: 6
+                background: Rectangle {
+                    radius: 6
+                    color: projectNameEditor.activeFocus
+                        ? "#1b2534"
+                        : root.surfaceColor
+                    border.color: projectNameEditor.activeFocus
+                        ? root.accentColor
+                        : root.borderColor
+                }
                 onVisibleChanged: {
                     if (visible) {
                         forceActiveFocus()
@@ -107,6 +133,7 @@ Item {
         }
 
         ToolButton {
+            id: deleteButton
             hoverEnabled: true
             display: AbstractButton.IconOnly
             icon.source: "qrc:/qt/qml/RefNexus/resources/icon-trash.svg"
@@ -116,6 +143,15 @@ Item {
             ToolTip.text: "Delete project"
             ToolTip.delay: 1000
             ToolTip.visible: hovered
+            implicitWidth: 28
+            implicitHeight: 28
+            background: Rectangle {
+                radius: 8
+                color: deleteButton.down
+                    ? "#2a3a54"
+                    : (deleteButton.hovered ? "#1f2a3a" : root.surfaceColor)
+                border.color: root.borderColor
+            }
         }
     }
 }
