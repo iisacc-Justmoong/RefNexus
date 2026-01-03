@@ -21,6 +21,7 @@ Rectangle {
     signal createProjectRequested(string name)
     signal projectSelected(int index)
     signal deleteProjectRequested(int index)
+    signal duplicateProjectRequested(int index)
     signal renameProjectRequested(int index)
     signal renameCommitted()
     signal renameCanceled()
@@ -180,6 +181,7 @@ Rectangle {
                 onSelectRequested: root.projectSelected(index)
                 onRenameRequested: root.renameProjectRequested(index)
                 onDeleteRequested: root.deleteProjectRequested(index)
+                onDuplicateRequested: root.duplicateProjectRequested(index)
                 onEditingNameUpdated: function(updatedName) {
                     root.editingProjectNameUpdated(updatedName)
                 }

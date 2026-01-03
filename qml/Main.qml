@@ -631,6 +631,19 @@ ApplicationWindow {
         loadCurrentProject()
     }
 
+    function duplicateProject(index) {
+        if (!projectStore) {
+            return
+        }
+        syncCurrentProject()
+        autoSaveTimer.stop()
+        if (!projectStore.duplicateProject(index)) {
+            return
+        }
+        cancelRenameProject()
+        loadCurrentProject()
+    }
+
     function loadProject(index) {
         if (!projectStore) {
             return
@@ -756,6 +769,7 @@ ApplicationWindow {
             onCreateProjectRequested: root.createProject(name)
             onProjectSelected: root.loadProject(index)
             onDeleteProjectRequested: root.deleteProject(index)
+            onDuplicateProjectRequested: root.duplicateProject(index)
             onRenameProjectRequested: root.beginRenameProject(index)
             onRenameCommitted: root.commitRenameProject()
             onRenameCanceled: root.cancelRenameProject()

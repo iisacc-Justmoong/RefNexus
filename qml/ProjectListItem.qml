@@ -10,17 +10,19 @@ Item {
     property bool selected: false
     property bool editing: false
     property string editingName: ""
-    property color surfaceColor: "#121826"
-    property color surfaceHover: "#1a2332"
+    property color surfaceColor: "#182235"
+    property color surfaceHover: "#212c42"
     property color borderColor: "#243145"
     property color accentColor: "#5c7cfa"
     property color textPrimary: "#e6edf5"
     property color textSecondary: "#9aa6b2"
     property int contentPadding: 6
+    property bool rowHovered: hoverHandler.hovered
 
     signal selectRequested(int index)
     signal renameRequested(int index)
     signal deleteRequested(int index)
+    signal duplicateRequested(int index)
     signal editingNameUpdated(string name)
     signal renameCommitted()
     signal renameCanceled()
@@ -29,12 +31,16 @@ Item {
     implicitHeight: Math.max(34, contentRow.implicitHeight + contentPadding * 2)
     height: implicitHeight
 
+    HoverHandler {
+        id: hoverHandler
+    }
+
     Rectangle {
         anchors.fill: parent
         radius: 8
         color: root.selected
             ? "#1b2534"
-            : (projectSelectArea.containsMouse ? root.surfaceHover : "transparent")
+            : (projectSelectArea.containsMouse ? root.surfaceHover : root.surfaceColor)
         border.color: root.selected ? root.accentColor : "transparent"
     }
 
@@ -115,18 +121,26 @@ Item {
                 id: projectSelectArea
                 anchors.fill: parent
                 hoverEnabled: true
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
                 enabled: !root.editing
-                onClicked: {
+                onClicked: function(mouse) {
                     if (ListView.view) {
                         ListView.view.forceActiveFocus()
+                    }
+                    if (mouse.button === Qt.RightButton) {
+                        root.selectRequested(root.projectIndex)
+                        contextMenu.popup()
+                        return
                     }
                     root.selectRequested(root.projectIndex)
                 }
-                onDoubleClicked: {
+                onDoubleClicked: function(mouse) {
                     if (ListView.view) {
                         ListView.view.forceActiveFocus()
                     }
-                    root.renameRequested(root.projectIndex)
+                    if (mouse.button === Qt.LeftButton) {
+                        root.renameRequested(root.projectIndex)
+                    }
                 }
             }
 
@@ -143,6 +157,8 @@ Item {
             icon.width: 16
             icon.height: 16
             onClicked: root.deleteRequested(root.projectIndex)
+            opacity: root.rowHovered ? 1.0 : 0.0
+            enabled: root.rowHovered
             ToolTip.text: "Delete project"
             ToolTip.delay: 1000
             ToolTip.visible: hovered
@@ -155,6 +171,49 @@ Item {
                     : (deleteButton.hovered ? "#1f2a3a" : root.surfaceColor)
                 border.color: root.borderColor
             }
+        }
+    }
+
+    Menu {
+        id: contextMenu
+        property Item anchorItem: root.window ? root.window.contentItem : null
+        x: {
+            if (!anchorItem) {
+                return 0
+            }
+            var anchorWidth = root.width
+            var anchorX = root.x
+            var anchorY = root.y
+            var point = root.mapToItem(anchorItem, anchorWidth + 8, 0)
+            return point.x
+        }
+        y: {
+            if (!anchorItem) {
+                return 0
+            }
+            var anchorWidth = root.width
+            var anchorX = root.x
+            var anchorY = root.y
+            var point = root.mapToItem(anchorItem, anchorWidth + 8, 0)
+            return point.y
+        }
+
+        MenuItem {
+            text: "Rename"
+            enabled: !root.editing
+            onTriggered: root.renameRequested(root.projectIndex)
+        }
+
+        MenuItem {
+            text: "Duplicate"
+            enabled: !root.editing
+            onTriggered: root.duplicateRequested(root.projectIndex)
+        }
+
+        MenuItem {
+            text: "Delete"
+            enabled: !root.editing
+            onTriggered: root.deleteRequested(root.projectIndex)
         }
     }
 }

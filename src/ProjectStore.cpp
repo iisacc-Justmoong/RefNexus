@@ -74,6 +74,26 @@ bool ProjectStore::deleteProject(int index)
     return true;
 }
 
+bool ProjectStore::duplicateProject(int index)
+{
+    if (index < 0 || index >= m_projects.size()) {
+        return false;
+    }
+
+    const ProjectEntry source = m_projects.at(index);
+    const QString baseName = source.name.isEmpty()
+        ? defaultProjectName()
+        : QString("%1 Copy").arg(source.name);
+    ProjectEntry duplicateEntry;
+    duplicateEntry.name = makeUniqueName(baseName);
+    duplicateEntry.data = sanitizeItems(source.data, nullptr);
+    m_projects.insert(index + 1, duplicateEntry);
+    setCurrentProjectName(duplicateEntry.name);
+    saveToSettings();
+    emit projectsChanged();
+    return true;
+}
+
 bool ProjectStore::renameProject(int index, const QString& name)
 {
     if (index < 0 || index >= m_projects.size()) {

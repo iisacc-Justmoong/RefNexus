@@ -22,6 +22,7 @@ public:
     Q_INVOKABLE void reload();
     Q_INVOKABLE bool createProject(const QString& name);
     Q_INVOKABLE bool deleteProject(int index);
+    Q_INVOKABLE bool duplicateProject(int index);
     Q_INVOKABLE bool renameProject(int index, const QString& name);
     Q_INVOKABLE bool setCurrentProject(int index);
     Q_INVOKABLE bool updateCurrentProject(const QVariantList& items);
