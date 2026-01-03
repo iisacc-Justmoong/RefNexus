@@ -16,6 +16,7 @@ Item {
     property color accentColor: "#5c7cfa"
     property color textPrimary: "#e6edf5"
     property color textSecondary: "#9aa6b2"
+    property int contentPadding: 6
 
     signal selectRequested(int index)
     signal renameRequested(int index)
@@ -25,7 +26,8 @@ Item {
     signal renameCanceled()
 
     width: ListView.view ? ListView.view.width : 0
-    height: 34
+    implicitHeight: Math.max(34, contentRow.implicitHeight + contentPadding * 2)
+    height: implicitHeight
 
     Rectangle {
         anchors.fill: parent
@@ -37,8 +39,9 @@ Item {
     }
 
     RowLayout {
+        id: contentRow
         anchors.fill: parent
-        anchors.margins: 6
+        anchors.margins: root.contentPadding
         spacing: 8
 
         Item {
