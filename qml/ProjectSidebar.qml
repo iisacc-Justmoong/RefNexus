@@ -200,7 +200,7 @@ Rectangle {
 
             Text {
                 anchors.centerIn: parent
-                visible: root.projectModel ? root.projectModel.count === 0 : true
+                visible: projectList.count === 0
                 text: "No saved projects yet"
                 color: "#9aa6b2"
                 font.pixelSize: 12

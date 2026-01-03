@@ -24,8 +24,6 @@ qt_policy (SET QTP0004 NEW)
 qt_add_executable (RefNexus
         MANUAL_FINALIZATION
         MACOSX_BUNDLE
-        src/ImageTools.cpp
-        src/ImageTools.h
         src/InputState.cpp
         src/InputState.h
         src/main.cpp

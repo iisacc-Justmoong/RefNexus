@@ -48,10 +48,6 @@ ApplicationWindow {
         id: canvasModel
     }
 
-    ListModel {
-        id: projectModel
-    }
-
     Timer {
         id: autoSaveTimer
         interval: 250
@@ -124,7 +120,6 @@ ApplicationWindow {
             return
         }
         autoSaveTimer.restart()
-        projectStore.updateCurrentProject(serializeCanvasItems())
     }
 
     function syncCurrentProject() {
@@ -273,19 +268,6 @@ ApplicationWindow {
         return []
     }
 
-    function refreshProjects() {
-        projectModel.clear()
-        if (!projectStore) {
-            return
-        }
-        var projects = projectStore.projects
-        for (var i = 0; i < projects.length; i += 1) {
-            projectModel.append({
-                name: projects[i].name
-            })
-        }
-    }
-
     function loadCurrentProject() {
         if (!projectStore) {
             return
@@ -299,11 +281,15 @@ ApplicationWindow {
     }
 
     function beginRenameProject(index) {
-        if (index < 0 || index >= projectModel.count) {
+        if (!projectStore) {
+            return
+        }
+        var projects = projectStore.projects
+        if (index < 0 || index >= projects.length) {
             return
         }
         editingProjectIndex = index
-        editingProjectName = projectModel.get(index).name
+        editingProjectName = projects[index].name
     }
 
     function commitRenameProject() {
@@ -315,7 +301,6 @@ ApplicationWindow {
         }
         editingProjectIndex = -1
         editingProjectName = ""
-        refreshProjects()
         selectedProjectIndex = projectStore ? projectStore.currentProjectIndex : -1
     }
 
@@ -325,8 +310,13 @@ ApplicationWindow {
     }
 
     function selectProjectByName(name) {
-        for (var i = 0; i < projectModel.count; i += 1) {
-            if (projectModel.get(i).name === name) {
+        if (!projectStore) {
+            selectedProjectIndex = -1
+            return
+        }
+        var projects = projectStore.projects
+        for (var i = 0; i < projects.length; i += 1) {
+            if (projects[i].name === name) {
                 selectedProjectIndex = i
                 return
             }
@@ -625,7 +615,6 @@ ApplicationWindow {
             return
         }
         cancelRenameProject()
-        refreshProjects()
         loadCurrentProject()
     }
 
@@ -639,7 +628,6 @@ ApplicationWindow {
         if (editingProjectIndex >= 0) {
             cancelRenameProject()
         }
-        refreshProjects()
         loadCurrentProject()
     }
 
@@ -662,7 +650,6 @@ ApplicationWindow {
         if (projectStore) {
             projectStore.reload()
         }
-        refreshProjects()
         loadCurrentProject()
         canvasView.requestGridPaint()
     }
@@ -670,7 +657,6 @@ ApplicationWindow {
     Connections {
         target: projectStore
         function onProjectsChanged() {
-            refreshProjects()
             loadCurrentProject()
             canvasView.requestGridPaint()
         }
@@ -762,7 +748,7 @@ ApplicationWindow {
             Layout.maximumWidth: root.leftSidebarCollapsed ? 40 : 260
             Layout.fillHeight: true
             collapsed: root.leftSidebarCollapsed
-            projectModel: projectModel
+            projectModel: projectStore ? projectStore.projects : []
             selectedProjectIndex: root.selectedProjectIndex
             editingProjectIndex: root.editingProjectIndex
             editingProjectName: root.editingProjectName
